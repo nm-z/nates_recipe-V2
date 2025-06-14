@@ -1,0 +1,21 @@
+# Core ML libraries
+scikit-learn>=1.3.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Hyperparameter optimization
+optuna>=3.4.0
+
+# Model persistence and utilities
+joblib>=1.3.0
+
+# Progress bars and rich logging
+tqdm>=4.65.0
+rich>=13.0.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Additional utilities
+pathlib2>=2.3.7; python_version < '3.4' 
