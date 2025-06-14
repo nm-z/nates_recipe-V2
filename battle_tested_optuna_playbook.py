@@ -24,7 +24,10 @@ from pathlib import Path
 
 # Core ML libraries
 from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split
-from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.preprocessing import (
+    StandardScaler, RobustScaler, QuantileTransformer,
+    PowerTransformer, MinMaxScaler
+)
 from sklearn.feature_selection import VarianceThreshold, SelectKBest, mutual_info_regression
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
@@ -252,8 +255,24 @@ class BattleTestedOptimizer:
         """Optuna objective function - exact recipe implementation"""
         try:
             # Pipeline for every trial as specified in recipe
+            scaler_choice = trial.suggest_categorical(
+                'scaler', ['robust', 'standard', 'quant', 'power', 'minmax']
+            )
+
+            if scaler_choice == 'robust':
+                scaler = RobustScaler()
+            elif scaler_choice == 'standard':
+                scaler = StandardScaler()
+            elif scaler_choice == 'quant':
+                output_dist = trial.suggest_categorical('quant_output', ['uniform', 'normal'])
+                scaler = QuantileTransformer(output_distribution=output_dist, random_state=42)
+            elif scaler_choice == 'power':
+                scaler = PowerTransformer(method='yeo-johnson', standardize=True)
+            else:  # minmax
+                scaler = MinMaxScaler()
+
             steps = [
-                ('scale', RobustScaler()),
+                ('scale', scaler),
                 ('reduce', SelectKBest(
                     mutual_info_regression,
                     k=trial.suggest_int('k', 10, 500) if self.X_clean.shape[1] > 10000 else trial.suggest_int('k', 10, 100)
