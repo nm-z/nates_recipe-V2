@@ -25,11 +25,18 @@ from pathlib import Path
 # Core ML libraries
 from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split
 from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, mutual_info_regression
+from sklearn.feature_selection import (
+    VarianceThreshold,
+    SelectKBest,
+    mutual_info_regression,
+    f_regression,
+    RFECV,
+)
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+from sklearn.base import BaseEstimator, TransformerMixin
 
 # Model zoo
 from sklearn.linear_model import Ridge, RidgeCV, ElasticNet
@@ -50,6 +57,13 @@ import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
 
+# Optional HSIC Lasso dependency
+try:
+    from pyHSICLasso import HSICLasso
+    HAS_HSIC = True
+except Exception:
+    HAS_HSIC = False
+
 # ANSI colors for output
 class Colors:
     GREEN = '\033[92m'
@@ -61,6 +75,37 @@ class Colors:
     WHITE = '\033[97m'
     BOLD = '\033[1m'
     END = '\033[0m'
+
+
+class HSICFeatureSelector(BaseEstimator, TransformerMixin):
+    """Feature selector using HSIC Lasso if available."""
+
+    def __init__(self, k=50):
+        self.k = k
+        self.selected_features_ = None
+
+    def fit(self, X, y):
+        if HAS_HSIC:
+            try:
+                hsic = HSICLasso()
+                hsic.input(X, y, kappa=1)
+                hsic.classify()
+                idx = hsic.get_index()[: self.k]
+                self.selected_features_ = np.array(idx, dtype=int)
+                return self
+            except Exception:
+                pass
+
+        # Fallback: simple correlation ranking
+        corrs = np.abs([np.corrcoef(X[:, i], y)[0, 1] for i in range(X.shape[1])])
+        corrs = np.nan_to_num(corrs)
+        self.selected_features_ = np.argsort(corrs)[-self.k:]
+        return self
+
+    def transform(self, X):
+        if self.selected_features_ is None:
+            return X
+        return X[:, self.selected_features_]
 
 class BattleTestedOptimizer:
     def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3):
@@ -252,12 +297,23 @@ class BattleTestedOptimizer:
         """Optuna objective function - exact recipe implementation"""
         try:
             # Pipeline for every trial as specified in recipe
+            k = trial.suggest_int('k', 10, 500) if self.X_clean.shape[1] > 10000 else trial.suggest_int('k', 10, 100)
+            feat_sel = trial.suggest_categorical('feat_sel', ['mi', 'hsic', 'f', 'rfecv'])
+
+            if feat_sel == 'mi':
+                selector = SelectKBest(mutual_info_regression, k=k)
+            elif feat_sel == 'hsic':
+                selector = HSICFeatureSelector(k=k)
+            elif feat_sel == 'f':
+                selector = SelectKBest(f_regression, k=k)
+            else:  # rfecv
+                base = trial.suggest_categorical('rfecv_base', ['ridge', 'gbrt'])
+                estimator = Ridge(alpha=1.0) if base == 'ridge' else GradientBoostingRegressor(random_state=42)
+                selector = RFECV(estimator, min_features_to_select=k, cv=3)
+
             steps = [
                 ('scale', RobustScaler()),
-                ('reduce', SelectKBest(
-                    mutual_info_regression,
-                    k=trial.suggest_int('k', 10, 500) if self.X_clean.shape[1] > 10000 else trial.suggest_int('k', 10, 100)
-                )),
+                ('reduce', selector),
                 ('mdl', self.make_model(trial))
             ]
             
