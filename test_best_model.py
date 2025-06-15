@@ -292,7 +292,7 @@ def print_performance_table(results, dataset_name):
     print(f"{'Final Verdict:':<35} {final_verdict}")
     print(f"{'='*80}")
 
-def test_saved_model():
+def interactive_test_saved_model():
     """Interactive model testing with comprehensive analysis"""
     
     print("🔬 Interactive Model Performance Testing")
@@ -437,4 +437,4 @@ def test_saved_model():
     return results
 
 if __name__ == "__main__":
-    test_saved_model() 
+    interactive_test_saved_model()
