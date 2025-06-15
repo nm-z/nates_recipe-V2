@@ -157,6 +157,7 @@ class BattleTestedOptimizer:
         self.preprocessing_pipeline = None
         self.use_iforest = use_iforest
         self.use_lof = use_lof
+        self.need_cnn = False
         
         # Setup logging
         self.setup_logging()
@@ -525,6 +526,10 @@ class BattleTestedOptimizer:
         # Success criteria
         beats_baseline = r2_test > self.baseline_r2
         near_ceiling = abs(r2_test - self.noise_ceiling) < 0.05
+
+        # Determine if CNN workflow should be triggered
+        self.need_cnn = r2_test < (self.noise_ceiling - 0.05)
+        self.logger.info("Need CNN workflow: %s", self.need_cnn)
         
         self.logger.info("Model Assessment:")
         self.logger.info(f"  Beats baseline: {'✅ YES' if beats_baseline else '❌ NO'}")
@@ -544,6 +549,7 @@ class BattleTestedOptimizer:
             'noise_ceiling': self.noise_ceiling,
             'beats_baseline': beats_baseline,
             'near_ceiling': near_ceiling,
+            'need_cnn': self.need_cnn,
             'best_model_type': self.study.best_trial.user_attrs['model_type'],
             'best_params': self.study.best_params
         }
@@ -713,6 +719,8 @@ def main():
         if results:
             print(f"🧪 Test set R²: {results['test_r2']:.4f}")
             print(f"🏗️ Best model: {results['best_model_type']}")
+            if results.get('need_cnn'):
+                print(f"{Colors.YELLOW}⚠️ CNN workflow recommended{Colors.END}")
         
         print(f"\n📁 All outputs saved to: {Colors.BOLD}best_model_hold{DATASET}/{Colors.END}")
         print(f"   - hold{DATASET}_best_model.pkl (trained model)")

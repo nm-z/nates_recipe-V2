@@ -292,6 +292,7 @@ class BattleTestedOptimizer:
         self.preprocessing_pipeline = None
         self.iteration_count = 0
         self.ceiling_history = []
+        self.need_cnn = False
         
         # NEW: Two-phase optimization attributes
         self.validator_model_class = None
@@ -1363,6 +1364,10 @@ class BattleTestedOptimizer:
         # Success criteria
         beats_validation = r2_test > self.validation_r2
         near_ceiling = abs(r2_test - self.noise_ceiling) < 0.05
+
+        # Determine if CNN workflow should be triggered
+        self.need_cnn = r2_test < (self.noise_ceiling - 0.05)
+        self.logger.info("Need CNN workflow: %s", self.need_cnn)
         
         self.logger.info("Model Assessment:")
         self.logger.info("  Beats RidgeCV validation: %s", "✅ YES" if beats_validation else "❌ NO")
@@ -1383,6 +1388,7 @@ class BattleTestedOptimizer:
             'noise_ceiling': self.noise_ceiling,
             'beats_validation': beats_validation,
             'near_ceiling': near_ceiling,
+            'need_cnn': self.need_cnn,
             'best_model_type': self.study.best_trial.user_attrs['model_type'],
             'best_params': self.study.best_params,
             'ceiling_history': self.ceiling_history,
@@ -1650,6 +1656,9 @@ def main():
             else:
                 print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  Target not reached: {final_results['test_r2']:.4f} < {optimizer.target_r2:.4f}{Colors.END}")
                 set_console_title("⚠️ Target not reached")
+
+            if final_results.get('need_cnn'):
+                print(f"{Colors.YELLOW}⚠️ CNN workflow recommended{Colors.END}")
         
         print(f"\n📁 Outputs saved to: {Colors.BOLD}best_model_hold{DATASET}/{Colors.END}")
         

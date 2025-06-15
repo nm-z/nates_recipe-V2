@@ -296,6 +296,7 @@ class SystematicOptimizer:
         # Phase 3 results
         self.final_pipeline = None
         self.noise_ceiling = None
+        self.need_cnn = False
         
         # PERSISTENT GLOBAL TREE - Created once and updated throughout
         self.main_tree = None
@@ -1629,6 +1630,10 @@ class SystematicOptimizer:
         # Compare with noise ceiling
         ceiling_gap = abs(test_r2 - self.noise_ceiling)
         near_ceiling = ceiling_gap < 0.05
+
+        # Determine if CNN workflow should be triggered
+        self.need_cnn = test_r2 < (self.noise_ceiling - 0.05)
+        self.logger.info("Need CNN workflow: %s", self.need_cnn)
         
         ceiling_node = eval_tree.add("🎯 Ceiling Analysis")
         ceiling_node.add(f"Noise ceiling: {self.noise_ceiling:.4f}")
@@ -1661,6 +1666,7 @@ class SystematicOptimizer:
             'test_rmse': test_rmse,
             'noise_ceiling': self.noise_ceiling,
             'near_ceiling': near_ceiling,
+            'need_cnn': self.need_cnn,
             'winning_model': self.winning_model_class.__name__,
             'preprocessing_stack': [name for name, _ in self.preprocessing_stack],
             'model_family_results': {k: v['mean_r2'] for k, v in self.model_family_results.items()},
@@ -1847,7 +1853,10 @@ def main():
         
         # Run systematic optimization
         final_results = optimizer.run_systematic_optimization(X, y)
-        
+
+        if final_results and final_results.get('need_cnn'):
+            print("⚠️ CNN workflow recommended")
+
         return final_results
         
     except Exception as e:

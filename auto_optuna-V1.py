@@ -271,6 +271,7 @@ class BattleTestedOptimizer:
         self.preprocessing_pipeline = None
         self.iteration_count = 0
         self.ceiling_history = []
+        self.need_cnn = False
         
         # NEW: Pipeline for noise ceiling evaluation and trial tracking
         self.ridge_ceiling_pipe = Pipeline([
@@ -1224,6 +1225,10 @@ class BattleTestedOptimizer:
         # Success criteria
         beats_validation = r2_test > self.validation_r2
         near_ceiling = abs(r2_test - self.noise_ceiling) < 0.05
+
+        # Determine if CNN workflow should be triggered
+        self.need_cnn = r2_test < (self.noise_ceiling - 0.05)
+        self.logger.info("Need CNN workflow: %s", self.need_cnn)
         
         self.logger.info("Model Assessment:")
         self.logger.info("  Beats RidgeCV validation: %s", "✅ YES" if beats_validation else "❌ NO")
@@ -1244,6 +1249,7 @@ class BattleTestedOptimizer:
             'noise_ceiling': self.noise_ceiling,
             'beats_validation': beats_validation,
             'near_ceiling': near_ceiling,
+            'need_cnn': self.need_cnn,
             'best_model_type': self.study.best_trial.user_attrs['model_type'],
             'best_params': self.study.best_params,
             'ceiling_history': self.ceiling_history
@@ -1639,6 +1645,9 @@ def main():
                 print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  PARTIAL SUCCESS: Target achieved but ceiling may be higher{Colors.END}")
             else:
                 print(f"\n{Colors.RED}{Colors.BOLD}❌ TARGET NOT REACHED: Consider CNN approach or data quality issues{Colors.END}")
+
+            if final_results.get('need_cnn'):
+                print(f"{Colors.YELLOW}⚠️ CNN workflow recommended{Colors.END}")
         
         return final_results
         

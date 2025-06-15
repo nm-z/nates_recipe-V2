@@ -237,7 +237,10 @@ def main():  # noqa: D401 – imperative entry-point
     X, y = _load_dataset(DATASET)
 
     optimizer = SystematicOptimizerV13(dataset_num=DATASET)
-    return optimizer.run_systematic_optimization(X, y)
+    results = optimizer.run_systematic_optimization(X, y)
+    if results and results.get('need_cnn'):
+        print("⚠️ CNN workflow recommended")
+    return results
 
 
 if __name__ == "__main__":
