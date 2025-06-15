@@ -164,6 +164,30 @@ class SystematicOptimizer:
         model = self.create_model(trial)
         scores = cross_val_score(model, self.X_train, self.y_train, cv=self.cv, scoring='r2', n_jobs=-1)
         return scores.mean()
+
+    def _progress_callback(self, study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
+        """Report trial results and track the best score."""
+        from optuna.trial import TrialState
+
+        if trial.state != TrialState.COMPLETE:
+            return
+
+        if trial.value is None:
+            return
+
+        improvement = trial.value - self.current_best_r2
+        if improvement > 1e-4:
+            self.current_best_r2 = trial.value
+
+        ceiling_gap = (
+            abs(trial.value - self.noise_ceiling)
+            if self.noise_ceiling is not None
+            else float("inf")
+        )
+
+        print(
+            f"Trial {trial.number} finished: R²={trial.value:.4f} | Best={study.best_value:.4f} | Gap={ceiling_gap:.4f}"
+        )
     
     def phase_2_optimization(self):
         """Phase 2: Model optimization."""
@@ -175,7 +199,12 @@ class SystematicOptimizer:
             sampler=CONFIG["OPTUNA"]["SAMPLER"]
         )
         
-        study.optimize(self.objective, n_trials=self.max_hyperopt_trials, show_progress_bar=True)
+        study.optimize(
+            self.objective,
+            n_trials=self.max_hyperopt_trials,
+            show_progress_bar=True,
+            callbacks=[self._progress_callback],
+        )
         
         print(f"🏆 Best R²: {study.best_value:.4f}")
         print(f"🔧 Best params: {study.best_params}")
@@ -250,21 +279,77 @@ class SystematicOptimizer:
         return results
 
 
-class BattleTestedOptimizer:
-    """Legacy battle-tested optimizer for compatibility."""
-    
-    def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3, 
-                 use_iforest=False, use_lof=False):
-        self.dataset_num = dataset_num
+class BattleTestedOptimizer(SystematicOptimizer):
+    """Legacy wrapper maintaining backwards compatibility with older scripts."""
+
+    def __init__(
+        self,
+        dataset_num: int,
+        target_r2: float = 0.93,
+        max_trials: int = 40,
+        cv_splits: int = 5,
+        cv_repeats: int = 3,
+        use_iforest: bool = False,
+        use_lof: bool = False,
+    ) -> None:
+        # Allow tests to patch the Path class via battle_tested_optuna_playbook
+        import sys
+
+        mod = sys.modules.get("battle_tested_optuna_playbook")
+        if mod and hasattr(mod, "Path"):
+            globals()["Path"] = mod.Path
+
+        super().__init__(dataset_num, max_hyperopt_trials=max_trials)
         self.target_r2 = target_r2
         self.max_trials = max_trials
-        
-        print(f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}")
+        self.use_iforest = use_iforest
+        self.use_lof = use_lof
+
+        print(
+            f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}"
+        )
         print(f"   Target R²: {target_r2}")
         print(f"   Max trials: {max_trials}")
         print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
-    
+
     def run_optimization(self, X, y):
         """Run the battle-tested optimization pipeline."""
-        optimizer = SystematicOptimizer(self.dataset_num, max_hyperopt_trials=self.max_trials)
-        return optimizer.run_systematic_optimization(X, y) 
+        return self.run_systematic_optimization(X, y)
+
+    # ------------------------------------------------------------------
+    # Compatibility layer mimicking legacy step-based API
+    # ------------------------------------------------------------------
+    def step_1_pin_down_ceiling(self, X, y):
+        """Legacy step 1: data split and baseline ceiling estimation."""
+        if X.shape[0] < self.cv_splits:
+            raise ValueError("Not enough samples to split for cross-validation")
+        self.X = X
+        self.y = y
+        self.phase_1_data_preparation(X, y)
+        return self.noise_ceiling, self.current_best_r2
+
+    def step_2_bulletproof_preprocessing(self):
+        """Legacy step 2: placeholder for preprocessing search."""
+        # In this simplified wrapper all preprocessing happened in phase 1
+        self.X_clean = self.X
+        self.X_test_clean = self.X_test
+        self.preprocessing_pipeline = Pipeline([])
+        return self.X_clean.shape[1]
+
+    def step_3_optuna_search(self):
+        """Legacy step 3: run the Optuna hyperparameter search."""
+        self.phase_2_optimization()
+
+    def step_4_lock_in_champion(self):
+        """Legacy step 4: final evaluation and model saving."""
+        results = self.phase_3_final_evaluation()
+
+        # Remove intermediate artifacts to keep only the final model
+        for pkl in self.model_dir.glob("*.pkl"):
+            if "final_model" not in pkl.name:
+                pkl.unlink(missing_ok=True)
+
+        self.best_pipeline = self.final_pipeline
+        params = getattr(self, "study", None)
+        best_params = params.best_params if params else {}
+        return results["test_r2"], best_params
