@@ -18,7 +18,13 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import the modules to test
-from battle_tested_optuna_playbook import BattleTestedOptimizer, KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
+from battle_tested_optuna_playbook import (
+    SystematicOptimizer,
+    KMeansOutlierTransformer,
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+)
+from auto_optuna import CONFIG
 
 # Test fixtures
 @pytest.fixture
@@ -105,54 +111,51 @@ class TestOutlierTransformers:
         assert X_transformed.shape[1] == X.shape[1]
         assert hasattr(transformer, 'mask_')
 
-class TestBattleTestedOptimizer:
+class TestSystematicOptimizer:
     """Test the main optimizer class"""
     
     def test_optimizer_initialization(self, temp_model_dir):
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
-            
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=2)
+
             assert optimizer.dataset_num == 1
-            assert optimizer.max_trials == 2
-            assert optimizer.target_r2 == 0.93  # Default value
+            assert optimizer.max_hyperopt_trials == 2
             assert hasattr(optimizer, 'cv')
             assert hasattr(optimizer, 'logger')
     
     def test_noise_ceiling_calculation(self, sample_data, temp_model_dir):
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=2)
             
-            ceiling, baseline = optimizer.step_1_pin_down_ceiling(X, y)
+            optimizer.phase_1_data_preparation(X, y)
+            ceiling = optimizer.noise_ceiling
+            baseline = optimizer.current_best_r2
             
             assert isinstance(ceiling, float)
             assert isinstance(baseline, float)
             assert 0 <= baseline <= 1  # R² should be between 0 and 1
             assert baseline <= ceiling  # Ceiling should be >= baseline
-            assert optimizer.X is not None
-            assert optimizer.y is not None
+            assert optimizer.X_train is not None
+            assert optimizer.y_train is not None
             assert optimizer.X_test is not None
             assert optimizer.y_test is not None
     
     def test_preprocessing_pipeline(self, sample_data, temp_model_dir):
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
-            optimizer.step_1_pin_down_ceiling(X, y)
-            
-            initial_features = optimizer.step_2_bulletproof_preprocessing()
-            
-            assert isinstance(initial_features, int)
-            assert optimizer.X_clean is not None
-            assert optimizer.X_test_clean is not None
-            assert optimizer.preprocessing_pipeline is not None
-            assert optimizer.X_clean.shape[0] == optimizer.X.shape[0]  # Same samples
-            assert optimizer.X_clean.shape[1] <= optimizer.X.shape[1]  # Features may be reduced
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=2)
+            optimizer.phase_1_data_preparation(X, y)
+
+            assert isinstance(optimizer.preprocessing_components, dict)
+            assert 'var_threshold' in optimizer.preprocessing_components
+            assert 'scaler' in optimizer.preprocessing_components
+            assert optimizer.X_train.shape[0] < X.shape[0]
 
 # =============================================================================
 # INTEGRATION TESTS - End-to-End Pipeline
@@ -166,41 +169,39 @@ class TestPipelineIntegration:
         """Test a minimal training run with very few trials"""
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=3, target_r2=0.5)
-            
-            # Run minimal pipeline
-            optimizer.step_1_pin_down_ceiling(X, y)
-            optimizer.step_2_bulletproof_preprocessing()
-            optimizer.step_3_optuna_search()
-            final_r2, best_params = optimizer.step_4_lock_in_champion()
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=3)
+
+            results = optimizer.run_systematic_optimization(X, y)
+            final_r2 = results['test_r2']
+            best_params = optimizer.study.best_params
             
             assert isinstance(final_r2, float)
             assert isinstance(best_params, dict)
-            assert optimizer.best_pipeline is not None
+            assert optimizer.final_pipeline is not None
     
     def test_model_persistence(self, sample_data, temp_model_dir):
         """Test that models are properly saved and can be loaded"""
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
-            
-            optimizer.step_1_pin_down_ceiling(X, y)
-            optimizer.step_2_bulletproof_preprocessing()
-            optimizer.step_3_optuna_search()
-            optimizer.step_4_lock_in_champion()
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=2)
+
+            optimizer.run_systematic_optimization(X, y)
             
             # Check that model files are created
             model_files = list(temp_model_dir.glob("*.pkl"))
             assert len(model_files) > 0
-            
-            # Test loading
+
+            predictive_models = []
             for model_file in model_files:
                 loaded_model = joblib.load(model_file)
-                assert hasattr(loaded_model, 'predict')
+                if hasattr(loaded_model, 'predict'):
+                    predictive_models.append(loaded_model)
+
+            assert len(predictive_models) > 0
 
 # =============================================================================
 # DATA VALIDATION TESTS
@@ -266,23 +267,20 @@ class TestPerformance:
         """Test prediction speed is reasonable"""
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
-            
-            optimizer.step_1_pin_down_ceiling(X, y)
-            optimizer.step_2_bulletproof_preprocessing()
-            optimizer.step_3_optuna_search()
-            optimizer.step_4_lock_in_champion()
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=2)
+
+            optimizer.run_systematic_optimization(X, y)
             
             # Test prediction speed
             import time
             start_time = time.time()
-            predictions = optimizer.best_pipeline.predict(optimizer.X_test_clean)
+            predictions = optimizer.final_pipeline.predict(optimizer.X_test)
             end_time = time.time()
             
             prediction_time = end_time - start_time
-            samples_per_second = len(optimizer.X_test_clean) / prediction_time
+            samples_per_second = len(optimizer.X_test) / prediction_time
             
             assert samples_per_second > 100  # Should predict at least 100 samples/sec
 
@@ -299,17 +297,18 @@ class TestErrorHandling:
         X = np.array([[1, 2], [3, 4]], dtype=np.float32)
         y = np.array([1, 2], dtype=np.float32)
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=1)
             
             # Should handle minimal data gracefully
             try:
-                optimizer.step_1_pin_down_ceiling(X, y)
-                optimizer.step_2_bulletproof_preprocessing()
+                optimizer.phase_1_data_preparation(X, y)
+                optimizer.phase_2_optimization()
             except Exception as e:
                 # Should either work or fail gracefully
-                assert "samples" in str(e).lower() or "size" in str(e).lower()
+                msg = str(e).lower()
+                assert any(term in msg for term in ["sample", "samples", "size"])
     
     def test_invalid_data_types(self, temp_model_dir):
         """Test handling of invalid data types"""
@@ -317,12 +316,12 @@ class TestErrorHandling:
         X = np.array([["a", "b"], ["c", "d"]])  # String data
         y = np.array([1, 2], dtype=np.float32)
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
-            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
+            optimizer = SystematicOptimizer(dataset_num=1, max_hyperopt_trials=1)
             
             with pytest.raises((ValueError, TypeError)):
-                optimizer.step_1_pin_down_ceiling(X, y)
+                optimizer.phase_1_data_preparation(X, y)
 
 # =============================================================================
 # CONFIGURATION TESTS
