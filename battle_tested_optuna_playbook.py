@@ -7,6 +7,10 @@ Pushes theoretical accuracy limits on datasets using:
 - Robust preprocessing pipeline
 - Cross-validation with multiple model types
 - Strategic Optuna optimization until target R² achieved
+
+This legacy file predates the `auto_optuna` series of scripts. It is kept
+for historical reference only. See `docs/optuna_scripts_overview.md` for the
+recommended modern equivalents.
 """
 
 # =============================================================================

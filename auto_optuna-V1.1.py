@@ -5,6 +5,11 @@ Battle-Tested End-to-End ML Playbook v1.1 - FAST PHASE 1 EDITION
 Phase 1: FAST model selection (1 trial per model, 10 min max each)
 Phase 2: DEEP data optimization using ONLY the winning model
 - 12 threads, 1 iteration, immediate winner selection
+
+This script introduced the two-phase optimisation strategy. For a
+complete history of the different versions see
+`docs/optuna_scripts_overview.md`.
+Use `auto_optuna-V1.3.py` for the latest functionality.
 """
 
 # =============================================================================

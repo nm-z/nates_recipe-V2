@@ -13,6 +13,10 @@ Implementation strategy:
   behaviours that changed.  
 • Maintain 100 % interface compatibility so existing downstream code keeps
   working unchanged.
+
+This is the current recommended entry point for new experiments. Older
+versions remain available for reproducibility. A concise overview of all
+scripts can be found in `docs/optuna_scripts_overview.md`.
 """
 
 from __future__ import annotations

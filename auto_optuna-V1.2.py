@@ -5,6 +5,9 @@ Battle-Tested End-to-End ML Playbook v1.2 - SYSTEMATIC 3-PHASE EDITION
 Phase 1: MODEL FAMILY TOURNAMENT (Raw Data) - Find best model family
 Phase 2: ITERATIVE PREPROCESSING STACK OPTIMIZATION - Add 1 method at a time  
 Phase 3: DEEP MODEL HYPERPARAMETER OPTIMIZATION - Reach noise ceiling
+
+This version became the foundation for the v1.3 release. Refer to
+`docs/optuna_scripts_overview.md` for how each script fits together.
 """
 
 # =============================================================================
