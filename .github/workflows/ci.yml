@@ -55,12 +55,12 @@ jobs:
     
     - name: Test import integrity
       run: |
-        python -c "import battle_tested_optuna_playbook; print('✅ battle_tested_optuna_playbook imports successfully')"
-        python -c "from battle_tested_optuna_playbook import BattleTestedOptimizer; print('✅ BattleTestedOptimizer imports successfully')"
+        python -c "import battle_tested_optuna_playbook; print('[OK] battle_tested_optuna_playbook imports successfully')"
+        python -c "from battle_tested_optuna_playbook import BattleTestedOptimizer; print('[OK] BattleTestedOptimizer imports successfully')"
     
     - name: Test CLI entry points
       run: |
-        python -c "import battle_tested_optuna_playbook; print('✅ Main module callable:', callable(battle_tested_optuna_playbook.main))"
+        python -c "import battle_tested_optuna_playbook; print('[OK] Main module callable:', callable(battle_tested_optuna_playbook.main))"
     
     - name: Validate data loading (if CSV files exist)
       run: |
@@ -72,15 +72,15 @@ jobs:
         # Check if any CSV files exist
         csv_files = list(Path('.').glob('*.csv'))
         if csv_files:
-            print(f'✅ Found {len(csv_files)} CSV files')
+            print(f'[OK] Found {len(csv_files)} CSV files')
             for csv_file in csv_files[:2]:  # Test first 2 files
                 try:
                     df = pd.read_csv(csv_file, header=None, nrows=5)  # Just read first 5 rows
-                    print(f'✅ {csv_file.name}: {df.shape} (sample)')
+                    print(f'[OK] {csv_file.name}: {df.shape} (sample)')
                 except Exception as e:
-                    print(f'⚠️  {csv_file.name}: {e}')
+                    print(f'[WARN] {csv_file.name}: {e}')
         else:
-            print('ℹ️  No CSV files found (expected in test environment)')
+            print('[INFO] No CSV files found (expected in test environment)')
         "
     
     - name: Memory and performance check
@@ -96,7 +96,7 @@ jobs:
         # Test basic numpy operations
         X = np.random.randn(1000, 100).astype(np.float32)
         y = np.random.randn(1000).astype(np.float32)
-        print(f'✅ Created test arrays: X{X.shape}, y{y.shape}')
+        print(f'[OK] Created test arrays: X{X.shape}, y{y.shape}')
         print(f'Memory usage: {(X.nbytes + y.nbytes) / (1024**2):.1f} MB')
         "
 
@@ -185,9 +185,9 @@ jobs:
             import pandas as pd
             import sklearn
             import optuna
-            print('✅ All critical imports successful on ${{ matrix.os }}')
+            print('[OK] All critical imports successful on ${{ matrix.os }}')
         except ImportError as e:
-            print(f'❌ Import error on ${{ matrix.os }}: {e}')
+            print(f'[FAIL] Import error on ${{ matrix.os }}: {e}')
             exit(1)
         "
     
@@ -206,6 +206,6 @@ jobs:
         model = GradientBoostingRegressor(n_estimators=10, random_state=42)
         scores = cross_val_score(model, X, y, cv=3, scoring='r2')
         
-        print(f'✅ ML operations successful on ${{ matrix.os }}')
+        print(f'[OK] ML operations successful on ${{ matrix.os }}')
         print(f'Cross-validation R² scores: {scores}')
         " 
