@@ -89,6 +89,7 @@ from scipy import stats
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
+from ml_utils import Colors, set_console_title, OutlierFilterTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer, HSICFeatureSelector, load_dataset
 
 # ─── Silence Optuna & your own INFO spam ─────────────────────────────
 import optuna
@@ -110,164 +111,6 @@ def set_console_title(msg):
     except Exception:
         pass  # Silently fail if title setting is not supported
 
-# ANSI colors for output
-class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    PURPLE = '\033[95m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    BOLD = '\033[1m'
-    LIME = '\033[92;1m'     # bold bright-green
-    END = '\033[0m'
-
-class OutlierFilterTransformer(BaseEstimator, TransformerMixin):
-    """Custom transformer that removes outliers using K-means clustering"""
-    def __init__(self, n_clusters=3, min_cluster_size_ratio=0.1, remove=False):
-        self.n_clusters = n_clusters
-        self.min_cluster_size_ratio = min_cluster_size_ratio
-        self.remove = remove  # NEW: flag to actually remove outliers
-        self.kmeans = None
-        self.valid_clusters = None
-        self.outlier_indices_ = None
-        
-    def fit(self, X, y=None):
-        # Fit K-means on the data and identify outliers consistently
-        del y  # Explicitly acknowledge unused parameter
-        try:
-            self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
-            cluster_labels = self.kmeans.fit_predict(X)
-            
-            # Identify clusters that are too small (potential outliers)
-            cluster_counts = np.bincount(cluster_labels)
-            min_size = int(len(X) * self.min_cluster_size_ratio)
-            self.valid_clusters = np.where(cluster_counts >= min_size)[0]
-            
-            # Store outlier indices for consistent behavior
-            valid_mask = np.isin(cluster_labels, self.valid_clusters)
-            self.outlier_indices_ = np.where(~valid_mask)[0]
-            
-            # Be very conservative - adaptive outlier removal threshold
-            max_removal_ratio = 0.15 if len(X) <= 200 else 0.2  # More conservative for smaller datasets
-            if len(self.outlier_indices_) > len(X) * max_removal_ratio:
-                # Too many outliers detected, skip removal to prevent data leakage
-                self.outlier_indices_ = np.array([])
-                
-        except Exception:
-            # If clustering fails, don't remove any samples
-            self.outlier_indices_ = np.array([])
-            self.kmeans = None
-        
-        return self
-    
-    def transform(self, X, *, remove=None):
-        """If remove=True drop rows marked as outliers, else return X unchanged."""
-        if remove is None:
-            remove = self.remove
-        if remove and self.outlier_indices_.size > 0:
-            keep_mask = np.ones(len(X), dtype=bool)
-            keep_mask[self.outlier_indices_] = False
-            return X[keep_mask]
-        return X
-
-class IsolationForestTransformer(BaseEstimator, TransformerMixin):
-    """Custom transformer for Isolation Forest outlier detection"""
-    def __init__(self, contamination=0.1, n_estimators=100, random_state=42, remove=False):
-        self.contamination = contamination
-        self.n_estimators = n_estimators
-        self.random_state = random_state
-        self.remove = remove  # NEW: flag to actually remove outliers
-        self.iforest = None
-        self.outlier_indices_ = None
-        
-    def fit(self, X, y=None):
-        del y  # Explicitly acknowledge unused parameter
-        try:
-            self.iforest = IsolationForest(
-                contamination=self.contamination,
-                n_estimators=self.n_estimators,
-                random_state=self.random_state,
-                n_jobs=-1
-            )
-            self.iforest.fit(X)
-            
-            # Store outlier indices for consistency
-            outlier_labels = self.iforest.predict(X)
-            self.outlier_indices_ = np.where(outlier_labels == -1)[0]
-        except Exception:
-            self.iforest = None
-            self.outlier_indices_ = np.array([])
-        return self
-    
-    def transform(self, X, *, remove=None):
-        """If remove=True drop rows marked as outliers, else return X unchanged."""
-        if remove is None:
-            remove = self.remove
-        if remove and self.outlier_indices_.size > 0:
-            keep_mask = np.ones(len(X), dtype=bool)
-            keep_mask[self.outlier_indices_] = False
-            return X[keep_mask]
-        return X
-
-class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
-    """Custom transformer for Local Outlier Factor detection"""
-    def __init__(self, n_neighbors=20, contamination=0.1, remove=False):
-        self.n_neighbors = n_neighbors
-        self.contamination = contamination
-        self.remove = remove  # NEW: flag to actually remove outliers
-        self.lof = None
-        self.outlier_indices_ = None
-        
-    def fit(self, X, y=None):
-        del y  # Explicitly acknowledge unused parameter
-        try:
-            self.lof = LocalOutlierFactor(
-                n_neighbors=min(self.n_neighbors, len(X) - 1),
-                contamination=self.contamination,
-                n_jobs=-1
-            )
-            
-            # For LOF, we need to fit_predict to get outlier labels
-            outlier_labels = self.lof.fit_predict(X)
-            self.outlier_indices_ = np.where(outlier_labels == -1)[0]
-        except Exception:
-            self.lof = None
-            self.outlier_indices_ = np.array([])
-        return self
-    
-    def transform(self, X, *, remove=None):
-        """If remove=True drop rows marked as outliers, else return X unchanged."""
-        if remove is None:
-            remove = self.remove
-        if remove and self.outlier_indices_.size > 0:
-            keep_mask = np.ones(len(X), dtype=bool)
-            keep_mask[self.outlier_indices_] = False
-            return X[keep_mask]
-        return X
-
-class HSICFeatureSelector(BaseEstimator, TransformerMixin):
-    """Custom HSIC-based feature selector (simplified implementation)"""
-    def __init__(self, k=50):
-        self.k = k
-        self.selected_features_ = None
-        
-    def fit(self, X, y):
-        try:
-            # Simplified HSIC: use correlation as approximation
-            correlations = np.abs([np.corrcoef(X[:, i], y)[0, 1] for i in range(X.shape[1])])
-            correlations = np.nan_to_num(correlations)
-            self.selected_features_ = np.argsort(correlations)[-self.k:]
-        except Exception:
-            # Fallback to first k features
-            self.selected_features_ = np.arange(min(self.k, X.shape[1]))
-        return self
-    
-    def transform(self, X):
-        if self.selected_features_ is None:
-            return X
-        return X[:, self.selected_features_]
 
 class BattleTestedOptimizer:
     def __init__(self, dataset_num, target_r2=0.93, max_trials=500, cv_splits=5, cv_repeats=3):
@@ -1597,20 +1440,8 @@ def main():
     
     try:
         # Load data based on dataset selection
-        if DATASET == 1:
-            print(f"\n{Colors.BOLD}{Colors.BLUE}📁 Loading Hold-1 Data{Colors.END}")
-            X = pd.read_csv('Predictors_Hold-1_2025-04-14_18-28.csv', header=None).values.astype(np.float32)
-            y = pd.read_csv('9_10_24_Hold_01_targets.csv', header=None).values.astype(np.float32).ravel()
-        elif DATASET == 2:
-            print(f"\n{Colors.BOLD}{Colors.BLUE}📁 Loading Hold-2 Data{Colors.END}")
-            X = pd.read_csv('hold2_predictor.csv', header=None).values.astype(np.float32)
-            y = pd.read_csv('hold2_target.csv', header=None).values.astype(np.float32).ravel()
-        elif DATASET == 3:
-            print(f"\n{Colors.BOLD}{Colors.BLUE}📁 Loading Hold-3 Data{Colors.END}")
-            X = pd.read_csv('predictors_Hold 1 Full_20250527_151252.csv', header=None).values.astype(np.float32)
-            y = pd.read_csv('targets_Hold 1 Full_20250527_151252.csv', header=None).values.astype(np.float32).ravel()
-        else:
-            raise ValueError("Invalid DATASET value: {}. Must be 1, 2, or 3.".format(DATASET))
+        X, y = load_dataset(DATASET)
+        print(f"\n{Colors.BOLD}{Colors.BLUE}📁 Loaded dataset {DATASET}{Colors.END}")
         
         print(f"{Colors.GREEN}✅ Data loaded: {X.shape[1]} features, {len(y)} samples{Colors.END}")
         print(f"   Feature-to-sample ratio: 1:{X.shape[1]/len(y):.1f}")
