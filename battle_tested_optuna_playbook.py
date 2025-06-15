@@ -128,11 +128,14 @@ class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
         self.mask_ = None
     def fit(self, X, y=None):
         del y
-        self.lof = LocalOutlierFactor(n_neighbors=min(self.n_neighbors, len(X)-1),
-                                      contamination=self.contamination,
-                                      novelty=True,
-                                      n_jobs=-1)
-        labels = self.lof.fit_predict(X)
+        self.lof = LocalOutlierFactor(
+            n_neighbors=min(self.n_neighbors, len(X) - 1),
+            contamination=self.contamination,
+            novelty=True,
+            n_jobs=-1,
+        )
+        self.lof.fit(X)
+        labels = self.lof.predict(X)
         self.mask_ = labels != -1
         return self
     def transform(self, X):
@@ -320,8 +323,8 @@ class BattleTestedOptimizer:
         self.logger.info(f"Features before: {initial_features}")
         self.logger.info(f"Features after: {self.X_clean.shape[1]}")
         self.logger.info(f"Removed: {removed_features} zero-variance features")
-        
-        return self.X_clean, self.X_test_clean
+
+        return initial_features
 
     def make_model(self, trial):
         """Create model based on type and Optuna trial suggestions - exact recipe"""
@@ -506,8 +509,11 @@ class BattleTestedOptimizer:
         preprocessing_path = self.model_dir / f"hold{self.dataset_num}_preprocessing_pipeline.pkl"
         joblib.dump(self.preprocessing_pipeline, preprocessing_path)
         self.logger.info(f"Preprocessing pipeline saved to: {preprocessing_path}")
-        
-        return self.best_pipeline
+
+        best_r2 = self.study.best_value
+        best_params = self.study.best_params
+
+        return best_r2, best_params
 
     def step_5_final_evaluation(self):
         """Step 5: Final evaluation on held-out test set"""
@@ -698,13 +704,13 @@ def main():
         noise_ceiling, baseline_r2 = optimizer.step_1_pin_down_ceiling(X, y)
         
         # Step 2: Bullet-proof preprocessing
-        X_clean, X_test_clean = optimizer.step_2_bulletproof_preprocessing()
+        optimizer.step_2_bulletproof_preprocessing()
         
         # Step 3: Optuna search
         success = optimizer.step_3_optuna_search()
         
         # Step 4: Lock in and export champion
-        best_pipeline = optimizer.step_4_lock_in_champion()
+        final_r2, best_params = optimizer.step_4_lock_in_champion()
         
         # Step 5: Final evaluation
         results = optimizer.step_5_final_evaluation()
