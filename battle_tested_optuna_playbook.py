@@ -30,7 +30,7 @@ from pathlib import Path
 from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.feature_selection import VarianceThreshold, SelectKBest, mutual_info_regression
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, IncrementalPCA
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -380,11 +380,12 @@ class BattleTestedOptimizer:
             # Pipeline for every trial as specified in recipe
             q_low = trial.suggest_int('robust_q_low', 1, 25)
             q_high = trial.suggest_int('robust_q_high', 75, 99)
+            k_max = min(100, self.X_clean.shape[1])
             steps = [
                 ('scale', RobustScaler(quantile_range=(q_low, q_high))),
                 ('reduce', SelectKBest(
                     mutual_info_regression,
-                    k=trial.suggest_int('k', 10, 500) if self.X_clean.shape[1] > 10000 else trial.suggest_int('k', 10, 100)
+                    k=trial.suggest_int('k', 10, k_max)
                 )),
                 ('mdl', self.make_model(trial))
             ]
