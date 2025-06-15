@@ -34,7 +34,7 @@ from sklearn.compose import ColumnTransformer
 # Model zoo
 from sklearn.linear_model import Ridge, RidgeCV, ElasticNet
 from sklearn.svm import SVR
-from sklearn.ensemble import GradientBoostingRegressor, BaggingRegressor
+from sklearn.ensemble import GradientBoostingRegressor, BaggingRegressor, AdaBoostRegressor
 from sklearn.neural_network import MLPRegressor
 
 # Metrics
@@ -207,7 +207,7 @@ class BattleTestedOptimizer:
 
     def make_model(self, trial):
         """Create model based on type and Optuna trial suggestions - exact recipe"""
-        mdl = trial.suggest_categorical('mdl', ['ridge','elastic','svr','gbrt','mlp'])
+        mdl = trial.suggest_categorical('mdl', ['ridge','elastic','svr','gbrt','mlp','ada'])
         
         if mdl == 'ridge':
             return Ridge(alpha=trial.suggest_float('α', 1e-3, 10, log=True))
@@ -233,7 +233,7 @@ class BattleTestedOptimizer:
                 learning_rate=trial.suggest_float('lr', 0.01, 0.2),
                 random_state=42
             )
-        
+
         elif mdl == 'mlp':
             return MLPRegressor(
                 hidden_layer_sizes=trial.suggest_categorical(
@@ -242,6 +242,13 @@ class BattleTestedOptimizer:
                 learning_rate_init=trial.suggest_float('lr', 1e-4, 1e-2, log=True),
                 max_iter=800,
                 early_stopping=True,
+                random_state=42
+            )
+
+        elif mdl == 'ada':
+            return AdaBoostRegressor(
+                n_estimators=trial.suggest_int('n', 30, 300),
+                learning_rate=trial.suggest_float('lr', 0.01, 2.0, log=True),
                 random_state=42
             )
         
@@ -313,7 +320,7 @@ class BattleTestedOptimizer:
         self.logger.info("=" * 45)
         self.logger.info(f"Target R²: {self.target_r2}")
         self.logger.info(f"Max trials: {self.max_trials}")
-        self.logger.info("Search space: Ridge | ElasticNet | SVR | GBRT | MLP")
+        self.logger.info("Search space: Ridge | ElasticNet | SVR | GBRT | MLP | AdaBoost")
         
         # Create study with MedianPruner as specified
         self.study = optuna.create_study(
