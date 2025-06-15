@@ -29,7 +29,7 @@ from sklearn.preprocessing import (StandardScaler, RobustScaler, QuantileTransfo
                                  PowerTransformer, MinMaxScaler)
 from sklearn.feature_selection import (VarianceThreshold, SelectKBest, mutual_info_regression,
                                      f_regression, RFECV)
-from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD
+from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
@@ -486,45 +486,15 @@ class BattleTestedOptimizer:
             ('scale', scaler)
         ]
         
-        # Optional dimensionality reduction steps
-        use_pca = trial.suggest_categorical('use_pca', [False, True])
-        use_kpca = trial.suggest_categorical('use_kpca', [False, True])
-        use_ipca = trial.suggest_categorical('use_ipca', [False, True])
-        use_svd = trial.suggest_categorical('use_svd', [False, True])
+        # Optional PCA step
+        use_pca = trial.suggest_categorical('pca', [True, False])
 
         dim_red_used = []
 
         if use_pca:
-            max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('pca_n_components', 10, max_components)
-            steps.append(('pca', PCA(n_components=n_components, random_state=42)))
+            n_components = trial.suggest_int('pca_k', 50, 400)
+            steps.append(('pca', PCA(n_components=n_components)))
             dim_red_used.append('pca')
-
-        if use_kpca:
-            max_components = min(30, max(10, min(self.X.shape) - 10))  # More conservative for KernelPCA
-            n_components = trial.suggest_int('kpca_n_components', 10, max_components)
-            kernel = trial.suggest_categorical('kpca_kernel', ['rbf', 'poly'])
-            if kernel == 'rbf':
-                gamma = trial.suggest_float('kpca_gamma', 1e-4, 1e-1, log=True)
-                kpca = KernelPCA(n_components=n_components, kernel=kernel, gamma=gamma, random_state=42, n_jobs=-1)
-            else:
-                degree = trial.suggest_int('kpca_degree', 2, 3)
-                kpca = KernelPCA(n_components=n_components, kernel=kernel, degree=degree, random_state=42, n_jobs=-1)
-            steps.append(('kpca', kpca))
-            dim_red_used.append('kpca')
-
-        if use_ipca:
-            max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('ipca_n_components', 10, max_components)
-            batch_size = trial.suggest_int('ipca_batch_size', 10, 200)
-            steps.append(('ipca', IncrementalPCA(n_components=n_components, batch_size=batch_size)))
-            dim_red_used.append('ipca')
-
-        if use_svd:
-            max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('svd_n_components', 10, max_components)
-            steps.append(('svd', TruncatedSVD(n_components=n_components, random_state=42)))
-            dim_red_used.append('svd')
 
         trial.set_user_attr('dim_red', '+'.join(dim_red_used) if dim_red_used else 'none')
         
@@ -1278,13 +1248,7 @@ class BattleTestedOptimizer:
             # Dimensionality reduction info
             dim_red = trial.user_attrs.get('dim_red', 'none')
             if 'pca' in dim_red:
-                dim_info = f"PCA({trial.params.get('pca_n_components', 'N/A')})"
-            elif 'kpca' in dim_red:
-                dim_info = f"KPCA({trial.params.get('kpca_n_components', 'N/A')})"
-            elif 'ipca' in dim_red:
-                dim_info = f"IPCA({trial.params.get('ipca_n_components', 'N/A')})"
-            elif 'svd' in dim_red:
-                dim_info = f"SVD({trial.params.get('svd_n_components', 'N/A')})"
+                dim_info = f"PCA({trial.params.get('pca_k', 'N/A')})"
             else:
                 dim_info = "None"
             

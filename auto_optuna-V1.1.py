@@ -30,7 +30,7 @@ from sklearn.preprocessing import (StandardScaler, RobustScaler, QuantileTransfo
                                  PowerTransformer, MinMaxScaler)
 from sklearn.feature_selection import (VarianceThreshold, SelectKBest, mutual_info_regression,
                                      f_regression, RFECV)
-from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD
+from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
@@ -694,32 +694,15 @@ class BattleTestedOptimizer:
             ('scale', scaler)
         ]
         
-        # Enhanced dimensionality reduction options (removed IPCA due to batch issues)
-        dim_red_choice = trial.suggest_categorical('dim_red', ['none', 'pca', 'kpca', 'svd'])
-        
-        if dim_red_choice == 'pca':
-            max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('pca_components', 10, max_components)
-            steps.append(('dim_red', PCA(n_components=n_components, random_state=42)))
-            
-        elif dim_red_choice == 'kpca':
-            max_components = min(30, max(10, min(self.X.shape) - 10))  # More conservative for KernelPCA
-            n_components = trial.suggest_int('kpca_components', 10, max_components)
-            kernel = trial.suggest_categorical('kpca_kernel', ['rbf', 'poly'])  # Remove sigmoid to avoid issues
-            
-            if kernel == 'rbf':
-                gamma = trial.suggest_float('kpca_gamma', 1e-4, 1e-1, log=True)
-                kpca = KernelPCA(n_components=n_components, kernel=kernel, gamma=gamma, random_state=42, n_jobs=-1)
-            elif kernel == 'poly':
-                degree = trial.suggest_int('kpca_degree', 2, 3)  # More conservative degree
-                kpca = KernelPCA(n_components=n_components, kernel=kernel, degree=degree, random_state=42, n_jobs=-1)
-            
-            steps.append(('dim_red', kpca))
-            
-        elif dim_red_choice == 'svd':
-            max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('svd_components', 10, max_components)
-            steps.append(('dim_red', TruncatedSVD(n_components=n_components, random_state=42)))
+        # Optional PCA step
+        use_pca = trial.suggest_categorical('pca', [True, False])
+
+        if use_pca:
+            n_components = trial.suggest_int('pca_k', 50, 400)
+            steps.append(('pca', PCA(n_components=n_components)))
+            trial.set_user_attr('dim_red', 'pca')
+        else:
+            trial.set_user_attr('dim_red', 'none')
         
         # Enhanced feature selection
         feat_sel_choice = trial.suggest_categorical('feat_sel', ['mi', 'hsic', 'f', 'rfecv'])
@@ -1419,11 +1402,7 @@ class BattleTestedOptimizer:
             # Dimensionality reduction info
             dim_red = trial.params.get('dim_red', 'none')
             if dim_red == 'pca':
-                dim_info = f"PCA({trial.params.get('pca_components', 'N/A')})"
-            elif dim_red == 'kpca':
-                dim_info = f"KPCA({trial.params.get('kpca_components', 'N/A')})"
-            elif dim_red == 'svd':
-                dim_info = f"SVD({trial.params.get('svd_components', 'N/A')})"
+                dim_info = f"PCA({trial.params.get('pca_k', 'N/A')})"
             else:
                 dim_info = "None"
             
