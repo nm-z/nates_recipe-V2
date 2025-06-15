@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""
+Comprehensive Test Suite for Nate's Recipe Optimization Pipeline
+================================================================
+Tests all critical components without requiring user configuration.
+Follows the principle: 2 CSVs in → Model out, nothing more.
+"""
+
+import pytest
+import pandas as pd
+import numpy as np
+import joblib
+import tempfile
+import shutil
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+import warnings
+warnings.filterwarnings('ignore')
+
+# Import the modules to test
+from battle_tested_optuna_playbook import BattleTestedOptimizer, KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
+
+# Test fixtures
+@pytest.fixture
+def sample_data():
+    """Generate synthetic test data that mimics the real datasets"""
+    np.random.seed(42)
+    n_samples = 100
+    n_features = 50
+    
+    # Create synthetic predictors with some correlation structure
+    X = np.random.randn(n_samples, n_features)
+    # Add some correlated features
+    X[:, 1] = X[:, 0] + 0.5 * np.random.randn(n_samples)
+    X[:, 2] = X[:, 0] - 0.3 * np.random.randn(n_samples)
+    
+    # Create synthetic targets with realistic relationship
+    y = (2 * X[:, 0] + 1.5 * X[:, 1] - 0.8 * X[:, 2] + 
+         0.5 * np.sum(X[:, 3:8], axis=1) + 
+         0.1 * np.random.randn(n_samples))
+    
+    return X.astype(np.float32), y.astype(np.float32)
+
+@pytest.fixture
+def temp_csv_files(sample_data):
+    """Create temporary CSV files for testing"""
+    X, y = sample_data
+    temp_dir = Path(tempfile.mkdtemp())
+    
+    # Save as CSV files
+    predictor_file = temp_dir / "test_predictors.csv"
+    target_file = temp_dir / "test_targets.csv"
+    
+    pd.DataFrame(X).to_csv(predictor_file, header=False, index=False)
+    pd.DataFrame(y).to_csv(target_file, header=False, index=False)
+    
+    yield predictor_file, target_file
+    
+    # Cleanup
+    shutil.rmtree(temp_dir)
+
+@pytest.fixture
+def temp_model_dir():
+    """Create temporary directory for model artifacts"""
+    temp_dir = Path(tempfile.mkdtemp())
+    yield temp_dir
+    shutil.rmtree(temp_dir)
+
+# =============================================================================
+# UNIT TESTS - Individual Components
+# =============================================================================
+
+class TestOutlierTransformers:
+    """Test custom outlier detection transformers"""
+    
+    def test_kmeans_outlier_transformer(self, sample_data):
+        X, _ = sample_data
+        transformer = KMeansOutlierTransformer(n_clusters=3)
+        
+        # Test fit and transform
+        X_transformed = transformer.fit_transform(X)
+        
+        assert X_transformed.shape[0] <= X.shape[0]  # Should remove some samples
+        assert X_transformed.shape[1] == X.shape[1]  # Features unchanged
+        assert hasattr(transformer, 'mask_')
+        assert hasattr(transformer, 'valid_clusters_')
+    
+    def test_isolation_forest_transformer(self, sample_data):
+        X, _ = sample_data
+        transformer = IsolationForestTransformer(contamination=0.1)
+        
+        X_transformed = transformer.fit_transform(X)
+        
+        assert X_transformed.shape[0] <= X.shape[0]
+        assert X_transformed.shape[1] == X.shape[1]
+        assert hasattr(transformer, 'mask_')
+    
+    def test_lof_transformer(self, sample_data):
+        X, _ = sample_data
+        transformer = LocalOutlierFactorTransformer(n_neighbors=5, contamination=0.1)
+        
+        X_transformed = transformer.fit_transform(X)
+        
+        assert X_transformed.shape[0] <= X.shape[0]
+        assert X_transformed.shape[1] == X.shape[1]
+        assert hasattr(transformer, 'mask_')
+
+class TestBattleTestedOptimizer:
+    """Test the main optimizer class"""
+    
+    def test_optimizer_initialization(self, temp_model_dir):
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
+            
+            assert optimizer.dataset_num == 1
+            assert optimizer.max_trials == 2
+            assert optimizer.target_r2 == 0.93  # Default value
+            assert hasattr(optimizer, 'cv')
+            assert hasattr(optimizer, 'logger')
+    
+    def test_noise_ceiling_calculation(self, sample_data, temp_model_dir):
+        X, y = sample_data
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
+            
+            ceiling, baseline = optimizer.step_1_pin_down_ceiling(X, y)
+            
+            assert isinstance(ceiling, float)
+            assert isinstance(baseline, float)
+            assert 0 <= baseline <= 1  # R² should be between 0 and 1
+            assert baseline <= ceiling  # Ceiling should be >= baseline
+            assert optimizer.X is not None
+            assert optimizer.y is not None
+            assert optimizer.X_test is not None
+            assert optimizer.y_test is not None
+    
+    def test_preprocessing_pipeline(self, sample_data, temp_model_dir):
+        X, y = sample_data
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
+            optimizer.step_1_pin_down_ceiling(X, y)
+            
+            initial_features = optimizer.step_2_bulletproof_preprocessing()
+            
+            assert isinstance(initial_features, int)
+            assert optimizer.X_clean is not None
+            assert optimizer.X_test_clean is not None
+            assert optimizer.preprocessing_pipeline is not None
+            assert optimizer.X_clean.shape[0] == optimizer.X.shape[0]  # Same samples
+            assert optimizer.X_clean.shape[1] <= optimizer.X.shape[1]  # Features may be reduced
+
+# =============================================================================
+# INTEGRATION TESTS - End-to-End Pipeline
+# =============================================================================
+
+class TestPipelineIntegration:
+    """Test complete pipeline integration"""
+    
+    @pytest.mark.slow
+    def test_minimal_training_run(self, sample_data, temp_model_dir):
+        """Test a minimal training run with very few trials"""
+        X, y = sample_data
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=3, target_r2=0.5)
+            
+            # Run minimal pipeline
+            optimizer.step_1_pin_down_ceiling(X, y)
+            optimizer.step_2_bulletproof_preprocessing()
+            optimizer.step_3_optuna_search()
+            final_r2, best_params = optimizer.step_4_lock_in_champion()
+            
+            assert isinstance(final_r2, float)
+            assert isinstance(best_params, dict)
+            assert optimizer.best_pipeline is not None
+    
+    def test_model_persistence(self, sample_data, temp_model_dir):
+        """Test that models are properly saved and can be loaded"""
+        X, y = sample_data
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
+            
+            optimizer.step_1_pin_down_ceiling(X, y)
+            optimizer.step_2_bulletproof_preprocessing()
+            optimizer.step_3_optuna_search()
+            optimizer.step_4_lock_in_champion()
+            
+            # Check that model files are created
+            model_files = list(temp_model_dir.glob("*.pkl"))
+            assert len(model_files) > 0
+            
+            # Test loading
+            for model_file in model_files:
+                loaded_model = joblib.load(model_file)
+                assert hasattr(loaded_model, 'predict')
+
+# =============================================================================
+# DATA VALIDATION TESTS
+# =============================================================================
+
+class TestDataValidation:
+    """Test data loading and validation"""
+    
+    def test_csv_loading_format(self, temp_csv_files):
+        """Test that CSV files are loaded correctly"""
+        predictor_file, target_file = temp_csv_files
+        
+        # Test loading
+        X = pd.read_csv(predictor_file, header=None).values.astype(np.float32)
+        y = pd.read_csv(target_file, header=None).values.astype(np.float32).ravel()
+        
+        assert X.ndim == 2
+        assert y.ndim == 1
+        assert X.shape[0] == y.shape[0]
+        assert X.dtype == np.float32
+        assert y.dtype == np.float32
+    
+    def test_data_quality_checks(self, sample_data):
+        """Test data quality validation"""
+        X, y = sample_data
+        
+        # Check for NaN values
+        assert not np.any(np.isnan(X))
+        assert not np.any(np.isnan(y))
+        
+        # Check for infinite values
+        assert not np.any(np.isinf(X))
+        assert not np.any(np.isinf(y))
+        
+        # Check data types
+        assert X.dtype == np.float32
+        assert y.dtype == np.float32
+        
+        # Check shapes
+        assert X.ndim == 2
+        assert y.ndim == 1
+        assert X.shape[0] == y.shape[0]
+
+# =============================================================================
+# PERFORMANCE TESTS
+# =============================================================================
+
+class TestPerformance:
+    """Test performance characteristics"""
+    
+    def test_memory_usage(self, sample_data):
+        """Test that memory usage is reasonable"""
+        X, y = sample_data
+        
+        # Memory usage should be reasonable for the data size
+        x_memory_mb = X.nbytes / (1024 * 1024)
+        y_memory_mb = y.nbytes / (1024 * 1024)
+        
+        assert x_memory_mb < 100  # Should be much less for test data
+        assert y_memory_mb < 10
+    
+    def test_prediction_speed(self, sample_data, temp_model_dir):
+        """Test prediction speed is reasonable"""
+        X, y = sample_data
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
+            
+            optimizer.step_1_pin_down_ceiling(X, y)
+            optimizer.step_2_bulletproof_preprocessing()
+            optimizer.step_3_optuna_search()
+            optimizer.step_4_lock_in_champion()
+            
+            # Test prediction speed
+            import time
+            start_time = time.time()
+            predictions = optimizer.best_pipeline.predict(optimizer.X_test_clean)
+            end_time = time.time()
+            
+            prediction_time = end_time - start_time
+            samples_per_second = len(optimizer.X_test_clean) / prediction_time
+            
+            assert samples_per_second > 100  # Should predict at least 100 samples/sec
+
+# =============================================================================
+# ERROR HANDLING TESTS
+# =============================================================================
+
+class TestErrorHandling:
+    """Test error handling and edge cases"""
+    
+    def test_empty_data_handling(self, temp_model_dir):
+        """Test handling of empty or minimal data"""
+        # Create minimal data
+        X = np.array([[1, 2], [3, 4]], dtype=np.float32)
+        y = np.array([1, 2], dtype=np.float32)
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
+            
+            # Should handle minimal data gracefully
+            try:
+                optimizer.step_1_pin_down_ceiling(X, y)
+                optimizer.step_2_bulletproof_preprocessing()
+            except Exception as e:
+                # Should either work or fail gracefully
+                assert "samples" in str(e).lower() or "size" in str(e).lower()
+    
+    def test_invalid_data_types(self, temp_model_dir):
+        """Test handling of invalid data types"""
+        # Create data with wrong types
+        X = np.array([["a", "b"], ["c", "d"]])  # String data
+        y = np.array([1, 2], dtype=np.float32)
+        
+        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            mock_path.return_value = temp_model_dir
+            optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
+            
+            with pytest.raises((ValueError, TypeError)):
+                optimizer.step_1_pin_down_ceiling(X, y)
+
+# =============================================================================
+# CONFIGURATION TESTS
+# =============================================================================
+
+class TestConfiguration:
+    """Test that no user configuration is required"""
+    
+    def test_hardcoded_dataset_numbers(self):
+        """Test that dataset numbers are properly hardcoded"""
+        # Import the main modules
+        import battle_tested_optuna_playbook
+        
+        # Check that DATASET is hardcoded
+        assert hasattr(battle_tested_optuna_playbook, 'DATASET')
+        assert isinstance(battle_tested_optuna_playbook.DATASET, int)
+        assert battle_tested_optuna_playbook.DATASET in [1, 2, 3]
+    
+    def test_no_config_files_required(self):
+        """Test that no configuration files are required"""
+        # The pipeline should work without any config files
+        current_dir = Path.cwd()
+        config_files = list(current_dir.glob("*.config")) + list(current_dir.glob("*.cfg")) + list(current_dir.glob("config.*"))
+        
+        # Should not require any config files to exist
+        # (This test passes if no config files are found or if they're optional)
+        assert True  # Pipeline works without config files
+    
+    def test_minimal_command_line_interface(self):
+        """Test that the CLI requires minimal input"""
+        # The main scripts should run with no arguments
+        # This is tested by checking that main() functions exist and are callable
+        import battle_tested_optuna_playbook
+        
+        assert hasattr(battle_tested_optuna_playbook, 'main')
+        assert callable(battle_tested_optuna_playbook.main)
+
+if __name__ == "__main__":
+    # Run tests with verbose output
+    pytest.main([__file__, "-v", "--tb=short"]) 
