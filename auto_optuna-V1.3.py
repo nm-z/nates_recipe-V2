@@ -26,6 +26,8 @@ import pathlib
 import sys
 import time
 from types import ModuleType
+from rich.console import Console
+from rich.tree import Tree
 
 # -----------------------------------------------------------------------------
 # 1️⃣  Centralised configuration
@@ -64,19 +66,25 @@ CONFIG = {
 CURRENT_FILE = pathlib.Path(__file__).resolve()
 V12_PATH = CURRENT_FILE.with_name("auto_optuna-V1.2.py")
 
-spec = importlib.util.spec_from_file_location("auto_optuna_v1_2", V12_PATH)
-if spec is None or spec.loader is None:  # pragma: no cover – should never happen
-    raise ImportError(f"Could not locate auto_optuna-V1.2.py at {V12_PATH}")
+if V12_PATH.exists():
+    spec = importlib.util.spec_from_file_location("auto_optuna_v1_2", V12_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover – should never happen
+        raise ImportError(f"Could not locate auto_optuna-V1.2.py at {V12_PATH}")
 
-auto_optuna_v1_2: ModuleType = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-sys.modules[spec.name] = auto_optuna_v1_2  # make importable elsewhere
-spec.loader.exec_module(auto_optuna_v1_2)  # type: ignore[arg-type]
+    auto_optuna_v1_2: ModuleType = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    sys.modules[spec.name] = auto_optuna_v1_2  # make importable elsewhere
+    spec.loader.exec_module(auto_optuna_v1_2)  # type: ignore[arg-type]
 
-# Extract common Rich helpers if available
-HAS_RICH = getattr(auto_optuna_v1_2, "HAS_RICH", False)
-if HAS_RICH:
-    Tree = auto_optuna_v1_2.Tree       # noqa: N806 (keep camel-case to match Rich API)
-    console = auto_optuna_v1_2.console
+    HAS_RICH = getattr(auto_optuna_v1_2, "HAS_RICH", False)
+    if HAS_RICH:
+        Tree = auto_optuna_v1_2.Tree       # noqa: N806 (keep camel-case to match Rich API)
+        console = auto_optuna_v1_2.console
+else:
+    from auto_optuna.optimizer import SystematicOptimizer
+    auto_optuna_v1_2 = ModuleType("auto_optuna_v1_2")
+    auto_optuna_v1_2.SystematicOptimizer = SystematicOptimizer
+    console = Console()
+    HAS_RICH = True
 
 # -----------------------------------------------------------------------------
 # 3️⃣  Extended SystematicOptimizer (v1.3)

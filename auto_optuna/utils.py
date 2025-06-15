@@ -7,11 +7,15 @@ Common utility functions for data loading, logging, and file operations.
 import pandas as pd
 import numpy as np
 import logging
+from rich.logging import RichHandler
+from rich.console import Console
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from .config import CONFIG, DATASET_FILES, Colors
+
+console = Console()
 
 def load_dataset(dataset_id: int):
     """
@@ -65,10 +69,10 @@ def setup_logging(dataset_num: int, model_dir: Path = None):
     
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_file),
-            logging.StreamHandler()
+            RichHandler(console=console, rich_tracebacks=True)
         ]
     )
     

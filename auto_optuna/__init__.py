@@ -17,7 +17,7 @@ from .transformers import (
     LocalOutlierFactorTransformer
 )
 from .config import CONFIG, Colors
-from .utils import load_dataset, setup_logging
+from .utils import load_dataset, setup_logging, console
 
 __version__ = "1.3.0"
 __all__ = [
@@ -29,5 +29,6 @@ __all__ = [
     "CONFIG",
     "Colors",
     "load_dataset",
-    "setup_logging"
-] 
+    "setup_logging",
+    "console"
+]
