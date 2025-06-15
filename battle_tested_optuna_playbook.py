@@ -30,6 +30,10 @@ from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.cluster import KMeans
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
 
 # Model zoo
 from sklearn.linear_model import Ridge, RidgeCV, ElasticNet
@@ -62,8 +66,79 @@ class Colors:
     BOLD = '\033[1m'
     END = '\033[0m'
 
+
+class KMeansOutlierTransformer(BaseEstimator, TransformerMixin):
+    """Remove outliers via K-means clustering"""
+    def __init__(self, n_clusters=3, min_cluster_size_ratio=0.1):
+        self.n_clusters = n_clusters
+        self.min_cluster_size_ratio = min_cluster_size_ratio
+        self.kmeans = None
+        self.valid_clusters_ = None
+        self.mask_ = None
+    def fit(self, X, y=None):
+        del y
+        self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
+        labels = self.kmeans.fit_predict(X)
+        counts = np.bincount(labels)
+        min_size = int(len(X) * self.min_cluster_size_ratio)
+        self.valid_clusters_ = np.where(counts >= min_size)[0]
+        self.mask_ = np.isin(labels, self.valid_clusters_)
+        return self
+    def transform(self, X):
+        labels = self.kmeans.predict(X)
+        mask = np.isin(labels, self.valid_clusters_)
+        return X[mask]
+    def get_support_mask(self):
+        return self.mask_
+
+class IsolationForestTransformer(BaseEstimator, TransformerMixin):
+    """Remove outliers via Isolation Forest"""
+    def __init__(self, contamination=0.1, n_estimators=100, random_state=42):
+        self.contamination = contamination
+        self.n_estimators = n_estimators
+        self.random_state = random_state
+        self.iforest = None
+        self.mask_ = None
+    def fit(self, X, y=None):
+        del y
+        self.iforest = IsolationForest(contamination=self.contamination,
+                                       n_estimators=self.n_estimators,
+                                       random_state=self.random_state,
+                                       n_jobs=-1)
+        labels = self.iforest.fit_predict(X)
+        self.mask_ = labels != -1
+        return self
+    def transform(self, X):
+        labels = self.iforest.predict(X)
+        mask = labels != -1
+        return X[mask]
+    def get_support_mask(self):
+        return self.mask_
+
+class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
+    """Remove outliers via Local Outlier Factor"""
+    def __init__(self, n_neighbors=20, contamination=0.1):
+        self.n_neighbors = n_neighbors
+        self.contamination = contamination
+        self.lof = None
+        self.mask_ = None
+    def fit(self, X, y=None):
+        del y
+        self.lof = LocalOutlierFactor(n_neighbors=min(self.n_neighbors, len(X)-1),
+                                      contamination=self.contamination,
+                                      novelty=True,
+                                      n_jobs=-1)
+        labels = self.lof.fit_predict(X)
+        self.mask_ = labels != -1
+        return self
+    def transform(self, X):
+        labels = self.lof.predict(X)
+        mask = labels != -1
+        return X[mask]
+    def get_support_mask(self):
+        return self.mask_
 class BattleTestedOptimizer:
-    def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3):
+    def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3, use_iforest=False, use_lof=False):
         self.dataset_num = dataset_num
         self.target_r2 = target_r2
         self.max_trials = max_trials
@@ -80,6 +155,8 @@ class BattleTestedOptimizer:
         self.study = None
         self.best_pipeline = None
         self.preprocessing_pipeline = None
+        self.use_iforest = use_iforest
+        self.use_lof = use_lof
         
         # Setup logging
         self.setup_logging()
@@ -197,6 +274,38 @@ class BattleTestedOptimizer:
         
         # Apply to test data
         self.X_test_clean = self.preprocessing_pipeline.transform(self.X_test)
+        # Outlier removal using K-means and optional methods
+        initial_samples = self.X_clean.shape[0]
+        km_filter = KMeansOutlierTransformer(n_clusters=3, min_cluster_size_ratio=0.1)
+        km_filter.fit(self.X_clean)
+        mask = km_filter.get_support_mask()
+        self.X_clean = km_filter.transform(self.X_clean)
+        self.y = self.y[mask]
+        removed = initial_samples - self.X_clean.shape[0]
+        if removed:
+            self.logger.info(f"KMeans removed {removed} outliers")
+
+        if self.use_iforest:
+            initial_samples = self.X_clean.shape[0]
+            if_filter = IsolationForestTransformer(contamination=0.1, n_estimators=100)
+            if_filter.fit(self.X_clean)
+            mask = if_filter.get_support_mask()
+            self.X_clean = if_filter.transform(self.X_clean)
+            self.y = self.y[mask]
+            removed = initial_samples - self.X_clean.shape[0]
+            if removed:
+                self.logger.info(f"IsolationForest removed {removed} outliers")
+
+        if self.use_lof:
+            initial_samples = self.X_clean.shape[0]
+            lof_filter = LocalOutlierFactorTransformer(n_neighbors=20, contamination=0.1)
+            lof_filter.fit(self.X_clean)
+            mask = lof_filter.get_support_mask()
+            self.X_clean = lof_filter.transform(self.X_clean)
+            self.y = self.y[mask]
+            removed = initial_samples - self.X_clean.shape[0]
+            if removed:
+                self.logger.info(f"LocalOutlierFactor removed {removed} outliers")
         
         removed_features = initial_features - self.X_clean.shape[1]
         self.logger.info(f"Features before: {initial_features}")
@@ -552,7 +661,7 @@ def main():
         print(f"✅ Data loaded: {X.shape} features, {len(y)} samples")
         
         # Initialize optimizer with same parameters for both datasets
-        optimizer = BattleTestedOptimizer(DATASET, target_r2=0.93, max_trials=40)
+        optimizer = BattleTestedOptimizer(DATASET, target_r2=0.93, max_trials=40, use_iforest=True, use_lof=True)
         
         # Execute the exact recipe
         print(f"\n{Colors.BOLD}{Colors.GREEN}🎯 EXECUTING EXACT RECIPE{Colors.END}")
