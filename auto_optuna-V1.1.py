@@ -848,6 +848,7 @@ class BattleTestedOptimizer:
             ('ridge', RidgeCV(alphas=np.logspace(-3, 3, 20)))
         ])
         
+        std_score = 0.0
         try:
             scores = cross_val_score(validation_pipe, self.X, self.y, cv=self.cv, scoring='r2', n_jobs=11)
             scores = scores[np.isfinite(scores)]  # Remove any inf/nan values
@@ -867,12 +868,14 @@ class BattleTestedOptimizer:
             else:
                 self.noise_ceiling = 0.95  # Default reasonable ceiling
                 self.validation_r2 = 0.0
-                
+                # std_score remains 0.0
+
         except Exception as e:
             self.logger.error("Noise ceiling estimation failed: %s", e)
             self.noise_ceiling = 0.95  # Default fallback
             self.validation_r2 = 0.0
-        
+            # retain std_score from any partial computation or default 0.0
+
         self.logger.info("RidgeCV validation R²: %.4f ± %.4f", self.validation_r2, std_score)
         self.logger.info("Noise ceiling (mean + 2·std): %.4f", self.noise_ceiling)
         
