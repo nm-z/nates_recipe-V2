@@ -4,14 +4,20 @@ Utilities Module
 Common utility functions for data loading, logging, and file operations.
 """
 
-import pandas as pd
 import numpy as np
 import logging
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from .config import CONFIG, DATASET_FILES, Colors
+from .config import CONFIG, Colors
+from sklearn.datasets import (
+    load_iris,
+    load_diabetes,
+    fetch_california_housing,
+    load_wine,
+    load_breast_cancer
+)
 
 try:  # Optional Rich integration
     from rich.tree import Tree
@@ -24,39 +30,40 @@ except Exception:  # pragma: no cover - Rich not installed
     console = None
     HAS_RICH = False
 
-def load_dataset(dataset_id: int):
+def load_dataset(dataset_name: str):
     """
-    Load dataset based on ID.
+    Load scikit-learn built-in dataset.
     
     Args:
-        dataset_id: Dataset identifier (1, 2, or 3)
+        dataset_name: Name of the scikit-learn dataset (e.g., 'diabetes')
         
     Returns:
         tuple: (X, y) arrays
     """
-    if dataset_id not in DATASET_FILES:
-        raise ValueError(f"Invalid dataset ID: {dataset_id}. Must be 1, 2, or 3")
+    if dataset_name not in CONFIG["SKLEARN_DATASETS"]:
+        raise ValueError(f"Invalid dataset name: {dataset_name}. Choose from {list(CONFIG['SKLEARN_DATASETS'].keys())}")
     
-    files = DATASET_FILES[dataset_id]
+    dataset_info = CONFIG["SKLEARN_DATASETS"][dataset_name]
+    loader_func = globals()[dataset_info["loader"]] # Get the function by name
     
     try:
-        X = pd.read_csv(files["predictors"], header=None).values.astype(np.float32)
-        y = pd.read_csv(files["targets"], header=None).values.astype(np.float32).ravel()
+        # Scikit-learn loaders typically return a Bunch object
+        data_bunch = loader_func()
+        X, y = data_bunch.data, data_bunch.target
         
         if HAS_RICH:
-            tree = Tree(f"✅ Loaded {files['name']} dataset")
+            tree = Tree(f"✅ Loaded {dataset_info['name']} dataset")
             tree.add(f"Predictors: {X.shape}")
             tree.add(f"Targets: {len(y)} samples")
             console.print(tree)
         else:
             print(
-                f"{Colors.GREEN}✅ Loaded {files['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}"
+                f"{Colors.GREEN}✅ Loaded {dataset_info['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}"
             )
-        return X, y
+        return X.astype(np.float32), y.astype(np.float32).ravel() # Ensure consistent dtypes and ravel for y
         
-    except FileNotFoundError as e:
-        print(f"{Colors.RED}❌ Dataset files not found: {e}{Colors.END}")
-        print(f"Expected files: {files['predictors']}, {files['targets']}")
+    except Exception as e:
+        print(f"{Colors.RED}❌ Error loading scikit-learn dataset '{dataset_name}': {e}{Colors.END}")
         raise
 
 
@@ -324,11 +331,11 @@ def validate_dataset_files(dataset_id: int):
     Returns:
         bool: True if files exist, False otherwise
     """
-    if dataset_id not in DATASET_FILES:
+    if dataset_id not in CONFIG["SKLEARN_DATASETS"]:
         return False
     
-    files = DATASET_FILES[dataset_id]
-    predictor_exists = Path(files["predictors"]).exists()
-    target_exists = Path(files["targets"]).exists()
+    dataset_info = CONFIG["SKLEARN_DATASETS"][dataset_id]
+    predictor_exists = True
+    target_exists = True
     
     return predictor_exists and target_exists 

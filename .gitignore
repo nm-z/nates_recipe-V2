@@ -164,4 +164,13 @@ best_model_*/
 
 # Logs
 *.log
-training_output.log 
+training_output.log
+
+# Project-specific exclusions for master branch strictness
+AGENTS.md
+.pylintrc
+tests/
+docs/
+requirements.txt
+.cursor/
+.github/ 

@@ -27,9 +27,18 @@ CONFIG = {
     
     # Dataset configuration
     "DATASET": {
-        "DEFAULT": 1,  # Default to Hold-1
+        "DEFAULT": "diabetes",  # Default to load_diabetes
         "TEST_SIZE": 0.2,
         "RANDOM_STATE": 42
+    },
+    
+    # Scikit-learn Built-in Datasets
+    "SKLEARN_DATASETS": {
+        "iris": {"loader": "load_iris", "type": "classification", "name": "Iris"},
+        "diabetes": {"loader": "load_diabetes", "type": "regression", "name": "Diabetes"},
+        "california_housing": {"loader": "fetch_california_housing", "type": "regression", "name": "California Housing"},
+        "wine": {"loader": "load_wine", "type": "classification", "name": "Wine"},
+        "breast_cancer": {"loader": "load_breast_cancer", "type": "classification", "name": "Breast Cancer Wisconsin"},
     },
     
     # Optuna optimization parameters
@@ -101,24 +110,5 @@ CONFIG = {
         "LOG_FILE_TEMPLATE": "hold{dataset_num}_training_log.txt",
         "MODEL_FILE_TEMPLATE": "hold{dataset_num}_final_model.pkl",
         "RESULTS_FILE_TEMPLATE": "hold{dataset_num}_results.txt"
-    }
-}
-
-# Dataset file mappings
-DATASET_FILES = {
-    1: {
-        "predictors": "Predictors_Hold-1_2025-04-14_18-28.csv",
-        "targets": "9_10_24_Hold_01_targets.csv",
-        "name": "Hold-1"
-    },
-    2: {
-        "predictors": "hold2_predictor.csv", 
-        "targets": "hold2_target.csv",
-        "name": "Hold-2"
-    },
-    3: {
-        "predictors": "predictors_Hold 1 Full_20250527_151252.csv",
-        "targets": "targets_Hold 1 Full_20250527_151252.csv", 
-        "name": "Hold-1 Full"
     }
 } 
