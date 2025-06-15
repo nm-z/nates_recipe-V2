@@ -27,6 +27,15 @@ import sys
 import time
 from types import ModuleType
 
+# Export legacy transformers for full backwards compatibility
+from auto_optuna.legacy import (
+    OutlierFilterTransformer,
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+    HSICFeatureSelector,
+    BattleTestedOptimizer,
+)
+
 # -----------------------------------------------------------------------------
 # 1️⃣  Centralised configuration
 # -----------------------------------------------------------------------------
