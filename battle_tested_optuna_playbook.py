@@ -128,17 +128,17 @@ class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
         self.mask_ = None
     def fit(self, X, y=None):
         del y
-        self.lof = LocalOutlierFactor(n_neighbors=min(self.n_neighbors, len(X)-1),
-                                      contamination=self.contamination,
-                                      novelty=True,
-                                      n_jobs=-1)
+        self.lof = LocalOutlierFactor(
+            n_neighbors=min(self.n_neighbors, len(X) - 1),
+            contamination=self.contamination,
+            novelty=False,
+            n_jobs=-1,
+        )
         labels = self.lof.fit_predict(X)
         self.mask_ = labels != -1
         return self
     def transform(self, X):
-        labels = self.lof.predict(X)
-        mask = labels != -1
-        return X[mask]
+        return X[self.mask_]
     def get_support_mask(self):
         return self.mask_
 class BattleTestedOptimizer:
@@ -248,6 +248,7 @@ class BattleTestedOptimizer:
             self.noise_ceiling = 0.95  # Default fallback
             self.baseline_r2 = 0.0
             # retain std_score from any partial computation or default 0.0
+            raise e
         
         self.logger.info(f"Baseline Ridge R²: {self.baseline_r2:.4f} ± {std_score:.4f}")
         self.logger.info(f"Noise ceiling (mean + 2·std): {self.noise_ceiling:.4f}")
@@ -279,7 +280,10 @@ class BattleTestedOptimizer:
         
         # Apply to training data
         initial_features = self.X.shape[1]
-        self.X_clean = self.preprocessing_pipeline.fit_transform(self.X)
+        try:
+            self.X_clean = self.preprocessing_pipeline.fit_transform(self.X)
+        except ValueError as e:
+            raise ValueError(f"insufficient samples for preprocessing: {e}") from e
         
         # Apply to test data
         self.X_test_clean = self.preprocessing_pipeline.transform(self.X_test)
@@ -321,7 +325,7 @@ class BattleTestedOptimizer:
         self.logger.info(f"Features after: {self.X_clean.shape[1]}")
         self.logger.info(f"Removed: {removed_features} zero-variance features")
         
-        return self.X_clean, self.X_test_clean
+        return initial_features
 
     def make_model(self, trial):
         """Create model based on type and Optuna trial suggestions - exact recipe"""
@@ -502,12 +506,9 @@ class BattleTestedOptimizer:
         joblib.dump(self.best_pipeline, model_path)
         self.logger.info(f"Best model saved to: {model_path}")
         
-        # Also save preprocessing pipeline separately
-        preprocessing_path = self.model_dir / f"hold{self.dataset_num}_preprocessing_pipeline.pkl"
-        joblib.dump(self.preprocessing_pipeline, preprocessing_path)
-        self.logger.info(f"Preprocessing pipeline saved to: {preprocessing_path}")
-        
-        return self.best_pipeline
+        y_pred = self.best_pipeline.predict(self.X_test_clean)
+        final_r2 = r2_score(self.y_test, y_pred)
+        return final_r2, self.study.best_trial.params
 
     def step_5_final_evaluation(self):
         """Step 5: Final evaluation on held-out test set"""
