@@ -13,6 +13,17 @@ import seaborn as sns
 from pathlib import Path
 from .config import CONFIG, DATASET_FILES, Colors
 
+try:  # Optional Rich integration
+    from rich.tree import Tree
+    from rich.console import Console
+
+    console = Console()
+    HAS_RICH = True
+except Exception:  # pragma: no cover - Rich not installed
+    Tree = None
+    console = None
+    HAS_RICH = False
+
 def load_dataset(dataset_id: int):
     """
     Load dataset based on ID.
@@ -31,8 +42,16 @@ def load_dataset(dataset_id: int):
     try:
         X = pd.read_csv(files["predictors"], header=None).values.astype(np.float32)
         y = pd.read_csv(files["targets"], header=None).values.astype(np.float32).ravel()
-        
-        print(f"{Colors.GREEN}✅ Loaded {files['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}")
+
+        if HAS_RICH:
+            tree = Tree(f"✅ Loaded {files['name']} dataset")
+            tree.add(f"Predictors: {X.shape}")
+            tree.add(f"Targets: {len(y)} samples")
+            console.print(tree)
+        else:
+            print(
+                f"{Colors.GREEN}✅ Loaded {files['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}"
+            )
         return X, y
         
     except FileNotFoundError as e:
@@ -97,20 +116,29 @@ def save_model_artifacts(model, preprocessing_components, dataset_num: int,
     # Save model
     model_file = model_dir / CONFIG["PATHS"]["MODEL_FILE_TEMPLATE"].format(dataset_num=dataset_num)
     joblib.dump(model, model_file)
-    
+
     # Save preprocessing components
     for name, component in preprocessing_components.items():
         component_file = model_dir / f"hold{dataset_num}_{name}.pkl"
         joblib.dump(component, component_file)
-    
+
     # Save results if provided
     if results:
         results_file = model_dir / CONFIG["PATHS"]["RESULTS_FILE_TEMPLATE"].format(dataset_num=dataset_num)
         with open(results_file, 'w') as f:
             for key, value in results.items():
                 f.write(f"{key}: {value}\n")
-    
-    print(f"{Colors.GREEN}💾 Model artifacts saved to {model_dir}/{Colors.END}")
+
+    if HAS_RICH:
+        tree = Tree("💾 Model artifacts saved")
+        tree.add(str(model_file))
+        for name in preprocessing_components:
+            tree.add(f"{name} saved")
+        if results:
+            tree.add(str(results_file))
+        console.print(tree)
+    else:
+        print(f"{Colors.GREEN}💾 Model artifacts saved to {model_dir}/{Colors.END}")
 
 
 def load_model_artifacts(dataset_num: int, model_dir: Path = None):
@@ -224,8 +252,11 @@ def create_diagnostic_plots(y_true, y_pred, study=None, dataset_num: int = 1,
     plot_file = model_dir / f"hold{dataset_num}_diagnostic_plots.png"
     plt.savefig(plot_file, dpi=300, bbox_inches='tight')
     plt.close()
-    
-    print(f"{Colors.GREEN}📊 Diagnostic plots saved to: {plot_file}{Colors.END}")
+
+    if HAS_RICH:
+        console.print(f"📊 Diagnostic plots saved to: {plot_file}")
+    else:
+        print(f"{Colors.GREEN}📊 Diagnostic plots saved to: {plot_file}{Colors.END}")
 
 
 def print_results_summary(results: dict, dataset_num: int):
@@ -236,29 +267,51 @@ def print_results_summary(results: dict, dataset_num: int):
         results: Results dictionary
         dataset_num: Dataset number
     """
-    print(f"\n{Colors.BOLD}{Colors.CYAN}📋 FINAL SUMMARY - Hold {dataset_num}{Colors.END}")
-    print("=" * 50)
-    
-    if 'test_r2' in results:
-        print(f"🧪 Test set R²: {results['test_r2']:.4f}")
-    if 'cv_best_r2' in results:
-        print(f"🏆 Best CV R²: {results['cv_best_r2']:.4f}")
-    if 'noise_ceiling' in results:
-        print(f"📏 Noise ceiling: {results['noise_ceiling']:.4f}")
-    if 'test_mae' in results:
-        print(f"📐 Test MAE: {results['test_mae']:.4f}")
-    if 'test_rmse' in results:
-        print(f"📊 Test RMSE: {results['test_rmse']:.4f}")
-    
-    # Performance assessment
-    if 'test_r2' in results and 'noise_ceiling' in results:
-        gap = abs(results['noise_ceiling'] - results['test_r2'])
-        if gap <= CONFIG["THRESHOLDS"]["EXCELLENT"]:
-            print(f"🎉 {Colors.GREEN}EXCELLENT - within 1% of ceiling!{Colors.END}")
-        elif gap <= CONFIG["THRESHOLDS"]["NEAR_CEILING"]:
-            print(f"✅ {Colors.YELLOW}Near ceiling - within 2%{Colors.END}")
-        else:
-            print(f"📈 {Colors.BLUE}Room for improvement{Colors.END}")
+    if HAS_RICH:
+        summary = Tree(f"📋 FINAL SUMMARY - Hold {dataset_num}")
+        if 'test_r2' in results:
+            summary.add(f"🧪 Test set R²: {results['test_r2']:.4f}")
+        if 'cv_best_r2' in results:
+            summary.add(f"🏆 Best CV R²: {results['cv_best_r2']:.4f}")
+        if 'noise_ceiling' in results:
+            summary.add(f"📏 Noise ceiling: {results['noise_ceiling']:.4f}")
+        if 'test_mae' in results:
+            summary.add(f"📐 Test MAE: {results['test_mae']:.4f}")
+        if 'test_rmse' in results:
+            summary.add(f"📊 Test RMSE: {results['test_rmse']:.4f}")
+
+        if 'test_r2' in results and 'noise_ceiling' in results:
+            gap = abs(results['noise_ceiling'] - results['test_r2'])
+            if gap <= CONFIG["THRESHOLDS"]["EXCELLENT"]:
+                summary.add("🎉 EXCELLENT - within 1% of ceiling!")
+            elif gap <= CONFIG["THRESHOLDS"]["NEAR_CEILING"]:
+                summary.add("✅ Near ceiling - within 2%")
+            else:
+                summary.add("📈 Room for improvement")
+        console.print(summary)
+    else:
+        print(f"\n{Colors.BOLD}{Colors.CYAN}📋 FINAL SUMMARY - Hold {dataset_num}{Colors.END}")
+        print("=" * 50)
+
+        if 'test_r2' in results:
+            print(f"🧪 Test set R²: {results['test_r2']:.4f}")
+        if 'cv_best_r2' in results:
+            print(f"🏆 Best CV R²: {results['cv_best_r2']:.4f}")
+        if 'noise_ceiling' in results:
+            print(f"📏 Noise ceiling: {results['noise_ceiling']:.4f}")
+        if 'test_mae' in results:
+            print(f"📐 Test MAE: {results['test_mae']:.4f}")
+        if 'test_rmse' in results:
+            print(f"📊 Test RMSE: {results['test_rmse']:.4f}")
+
+        if 'test_r2' in results and 'noise_ceiling' in results:
+            gap = abs(results['noise_ceiling'] - results['test_r2'])
+            if gap <= CONFIG["THRESHOLDS"]["EXCELLENT"]:
+                print(f"🎉 {Colors.GREEN}EXCELLENT - within 1% of ceiling!{Colors.END}")
+            elif gap <= CONFIG["THRESHOLDS"]["NEAR_CEILING"]:
+                print(f"✅ {Colors.YELLOW}Near ceiling - within 2%{Colors.END}")
+            else:
+                print(f"📈 {Colors.BLUE}Room for improvement{Colors.END}")
 
 
 def validate_dataset_files(dataset_id: int):
