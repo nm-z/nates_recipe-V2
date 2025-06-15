@@ -111,15 +111,17 @@ def check_hardcoded_dataset():
     violations = []
     
     try:
-        import battle_tested_optuna_playbook
-        if not hasattr(battle_tested_optuna_playbook, 'DATASET'):
-            violations.append("❌ battle_tested_optuna_playbook.py: missing hardcoded DATASET")
-        elif not isinstance(battle_tested_optuna_playbook.DATASET, int):
-            violations.append("❌ battle_tested_optuna_playbook.py: DATASET is not an integer")
-        elif battle_tested_optuna_playbook.DATASET not in [1, 2, 3]:
-            violations.append(f"❌ battle_tested_optuna_playbook.py: DATASET={battle_tested_optuna_playbook.DATASET} not in [1,2,3]")
+        import auto_optuna
+        if 'CONFIG' not in dir(auto_optuna):
+            violations.append("❌ auto_optuna package missing CONFIG")
+        else:
+            dataset = auto_optuna.CONFIG['DATASET']['DEFAULT']
+            if not isinstance(dataset, int):
+                violations.append("❌ auto_optuna.CONFIG['DATASET']['DEFAULT'] is not an integer")
+            elif dataset not in [1, 2, 3]:
+                violations.append(f"❌ auto_optuna.CONFIG['DATASET']['DEFAULT']={dataset} not in [1,2,3]")
     except ImportError as e:
-        violations.append(f"❌ Could not import battle_tested_optuna_playbook: {e}")
+        violations.append(f"❌ Could not import auto_optuna: {e}")
     
     return violations
 
