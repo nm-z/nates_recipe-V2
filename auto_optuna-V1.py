@@ -24,14 +24,14 @@ import logging
 from pathlib import Path
 
 # Core ML libraries
-from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split
+from sklearn.model_selection import RepeatedKFold, cross_val_score, train_test_split, BaseCrossValidator
 from sklearn.preprocessing import (StandardScaler, RobustScaler, QuantileTransformer, 
                                  PowerTransformer, MinMaxScaler)
 from sklearn.feature_selection import (VarianceThreshold, SelectKBest, mutual_info_regression,
                                      f_regression, RFECV)
 from sklearn.decomposition import PCA, KernelPCA, TruncatedSVD
 from sklearn.pipeline import Pipeline
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.compose import TransformedTargetRegressor
@@ -247,6 +247,36 @@ class HSICFeatureSelector(BaseEstimator, TransformerMixin):
         if self.selected_features_ is None:
             return X
         return X[:, self.selected_features_]
+
+
+class KMeansOutlierCV(BaseCrossValidator):
+    """Cross-validator that removes small K-means clusters from each training fold."""
+
+    def __init__(self, base_cv, n_clusters=3, min_cluster_ratio=0.1, random_state=42):
+        self.base_cv = base_cv
+        self.n_clusters = n_clusters
+        self.min_cluster_ratio = min_cluster_ratio
+        self.random_state = random_state
+
+    def split(self, X, y=None, groups=None):
+        X = np.asarray(X)
+        for train_idx, test_idx in self.base_cv.split(X, y, groups):
+            X_train = X[train_idx]
+            try:
+                km = MiniBatchKMeans(n_clusters=self.n_clusters, random_state=self.random_state)
+                labels = km.fit_predict(X_train)
+                counts = np.bincount(labels, minlength=self.n_clusters)
+                min_size = max(1, int(len(train_idx) * self.min_cluster_ratio))
+                valid = np.isin(labels, np.where(counts >= min_size)[0])
+                filtered_train_idx = train_idx[valid]
+                if len(filtered_train_idx) == 0:
+                    filtered_train_idx = train_idx
+            except Exception:
+                filtered_train_idx = train_idx
+            yield filtered_train_idx, test_idx
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return self.base_cv.get_n_splits(X, y, groups)
 
 class BattleTestedOptimizer:
     def __init__(self, dataset_num, target_r2=0.93, max_trials=200, cv_splits=5, cv_repeats=3):
@@ -956,7 +986,12 @@ class BattleTestedOptimizer:
             
             cv_splits = trial.suggest_int('cv_splits', 2, max_safe_splits)
             cv_repeats = trial.suggest_int('cv_repeats', 1, 3 if train_size > 150 else 2)
-            cv = RepeatedKFold(n_splits=cv_splits, n_repeats=cv_repeats, random_state=42)
+            base_cv = RepeatedKFold(n_splits=cv_splits, n_repeats=cv_repeats, random_state=42)
+
+            # Parameters for outlier-based CV filtering
+            km_clusters = trial.suggest_int('k', 2, 6)
+            km_ratio = trial.suggest_float('cluster_ratio', 0.05, 0.2)
+            cv = KMeansOutlierCV(base_cv, n_clusters=km_clusters, min_cluster_ratio=km_ratio)
             
             # Cross-validation scoring (back to high parallelization)
             scores = cross_val_score(final_pipe, self.X_clean, self.y, cv=cv, scoring='r2', n_jobs=-1)
