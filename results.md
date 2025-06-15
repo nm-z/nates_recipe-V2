@@ -104,6 +104,28 @@ We evaluated the trainability of Hold-1 SansEC dataset (targeting R² > 0.95), d
 - [ ] Create documentation for proper dataset splitting procedures
 - [ ] Develop cross-validation stability metrics monitoring
 
+## 4. Experiment History & Insights
+
+Multiple iterations of the training pipeline were executed while developing the project. Each version of the `auto_optuna` script introduced new features and improvements. The table below summarises the best results observed on the two available datasets.
+
+### 4.1 Experiments Overview
+
+| Version | Key Changes | Best R² (Hold-1) | Best R² (Hold-2) |
+|---------|-------------|-----------------|-----------------|
+| **V1.0** | Baseline grid search, manual preprocessing | 0.42 | 0.930 |
+| **V1.1** | Enhanced logging and simple Optuna search | 0.48 | 0.947 |
+| **V1.2** | Rich tree-based reporting with improved CV | 0.51 | 0.957 |
+| **V1.3** | Central CONFIG and console throttling | 0.52 | 0.965 |
+| **Playbook** | Modular pipeline with optional outlier filters | 0.52 | 0.965 |
+
+### 4.2 Insights
+
+- **Incremental Gains**: Accuracy improved slightly with each release as feature selection and cross-validation strategies matured.
+- **Logging Evolution**: Rich logging was critical for discovering the noise ceiling in the Hold-1 dataset and for diagnosing data leakage problems.
+- **Hyperparameter Search**: Optuna's guided search produced more stable models than manual tuning or grid search, especially for the GBRT models.
+- **Outlier Removal**: The battle-tested playbook includes optional outlier filters. These slightly reduced MAE but did not meaningfully change overall R², so they remain disabled by default.
+
+
 ---
 
 ## Appendices
