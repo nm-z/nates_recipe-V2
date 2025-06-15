@@ -40,6 +40,13 @@ CONFIG = {
         "wine": {"loader": "load_wine", "type": "classification", "name": "Wine"},
         "breast_cancer": {"loader": "load_breast_cancer", "type": "classification", "name": "Breast Cancer Wisconsin"},
     },
+
+    # Mapping from integer IDs to dataset keys within SKLEARN_DATASETS
+    "DATASET_ID_MAP": {
+        1: "diabetes",
+        2: "california_housing",
+        3: "diabetes",  # Defaulting to diabetes for hold-3
+    },
     
     # Optuna optimization parameters
     "OPTUNA": {
@@ -111,4 +118,29 @@ CONFIG = {
         "MODEL_FILE_TEMPLATE": "hold{dataset_num}_final_model.pkl",
         "RESULTS_FILE_TEMPLATE": "hold{dataset_num}_results.txt"
     }
-} 
+}
+
+# Mapping of dataset IDs to friendly names and optional file paths. The
+# loaders are handled via the SKLEARN_DATASETS configuration above. File
+# paths are left as ``None`` for built-in datasets but the structure allows
+# external CSV files to be specified if needed.
+DATASET_FILES = {
+    1: {
+        "name": CONFIG["SKLEARN_DATASETS"]["diabetes"]["name"],
+        "dataset": "diabetes",
+        "predictors": None,
+        "targets": None,
+    },
+    2: {
+        "name": CONFIG["SKLEARN_DATASETS"]["california_housing"]["name"],
+        "dataset": "california_housing",
+        "predictors": None,
+        "targets": None,
+    },
+    3: {
+        "name": CONFIG["SKLEARN_DATASETS"]["diabetes"]["name"],
+        "dataset": "diabetes",
+        "predictors": None,
+        "targets": None,
+    },
+}
