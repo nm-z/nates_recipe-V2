@@ -7,6 +7,19 @@ Common utility functions for data loading, logging, and file operations.
 import pandas as pd
 import numpy as np
 import logging
+
+try:  # Optional Rich integration
+    from rich.tree import Tree
+    from rich.console import Console
+    from rich.logging import RichHandler
+
+    console = Console()
+    HAS_RICH = True
+except Exception:  # pragma: no cover - Rich not installed
+    Tree = None
+    console = None
+    HAS_RICH = False
+    RichHandler = logging.StreamHandler  # type: ignore[assignment]
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -63,12 +76,14 @@ def setup_logging(dataset_num: int, model_dir: Path = None):
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
     
+    handler = RichHandler(console=console, rich_tracebacks=True) if HAS_RICH else logging.StreamHandler()
+
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_file),
-            logging.StreamHandler()
+            handler
         ]
     )
     
