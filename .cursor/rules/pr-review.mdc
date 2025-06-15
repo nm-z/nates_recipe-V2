@@ -1,0 +1,76 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+description: >
+  Manual rule — provides an explicit two-command GitHub PR workflow
+  that always declares the target branch first, fetches fresh state,
+  and prevents accidental main↔master overwrites.
+---
+
+# 🚀 **Explicit Branch & PR Management Workflow**
+
+## 📌 **Command #1 – Review the _oldest_ open PR targeting a specific branch**
+
+Use these 2 commands exactly:
+
+```bash
+BRANCH=<your_target_branch>; \
+git fetch origin && \
+PR=$(gh pr list --base "$BRANCH" --state open --json number,createdAt \
+      --jq 'sort_by(.createdAt)[0].number') && \
+echo -e "\n=== Reviewing PR #$PR against origin/$BRANCH ===\n" && \
+gh pr view "$PR" --json commits --template \
+  '{{range .commits}}{{printf "%.7s" .oid}} - {{.messageHeadline}}{{"\n"}}{{end}}' && \
+echo -e "\n--- DIFF vs origin/$BRANCH ---\n" && \
+gh pr diff "$PR" --base "$BRANCH"
+```
+
+**Usage notes**
+
+* Set `BRANCH` first (e.g., `main`, `master`).
+* Fetches latest remote state.
+* Selects the **oldest** open PR whose base is `$BRANCH`.
+* Prints commit hashes, then full diff against `origin/$BRANCH`.
+
+---
+
+## 📌 **Command #2 – Cherry-pick selected commits, push, and close the PR**
+
+```bash
+BRANCH=<your_target_branch> COMMENT="<your merge comment>" SHA="<SHA1> <SHA2>"; \
+git fetch origin && \
+git checkout "$BRANCH" && \
+git reset --hard "origin/$BRANCH" && \
+git cherry-pick $SHA && \
+git push origin "$BRANCH" && \
+gh pr close "$PR" --delete-branch --comment "$COMMENT"
+```
+
+**Usage notes**
+
+* Replace placeholders:
+
+  * `<your_target_branch>` — branch name (`main`, `master`, …).
+  * `<your merge comment>` — brief explanation of the merge.
+  * `<SHA1> <SHA2>` — commit IDs copied from Command #1.
+
+---
+
+## ⚙️ **Daily workflow**
+
+1. **Run Command #1** to review the oldest PR for `$BRANCH`.
+2. **Run Command #2** bu setting whichever `<SHA1> <SHA2>` — aka commit IDs you chose by looking at output from Command #1. to cherry-pick, push, and close the PR.
+3. Repeat until no PR's are left
+---
+
+## **Why this prevents overwrites**
+
+* Both commands declare `$BRANCH` explicitly.
+* `git fetch` + `git reset --hard origin/$BRANCH` ensures you act on the latest remote state.
+* `--base "$BRANCH"` scopes PR selection to the intended branch.
+* Cherry-picking chosen SHAs avoids unintended commits.
+* Immediate push and PR closure finish the merge and delete the feature branch.
+* Makes it easier for AI models like you to review pr's without having to think too much about git - and prevents wasting time running git commands for cleanup. 
+* The 2nd command's cleanup allows you to seamlessly loop both commands without git errors. 

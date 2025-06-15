@@ -32,6 +32,25 @@ CONFIG = {
         "RANDOM_STATE": 42
     },
     
+<<<<<<< HEAD:auto_optuna/config.py
+=======
+    # Scikit-learn Built-in Datasets
+    "SKLEARN_DATASETS": {
+        "iris": {"loader": "load_iris", "type": "classification", "name": "Iris"},
+        "diabetes": {"loader": "load_diabetes", "type": "regression", "name": "Diabetes"},
+        "california_housing": {"loader": "fetch_california_housing", "type": "regression", "name": "California Housing"},
+        "wine": {"loader": "load_wine", "type": "classification", "name": "Wine"},
+        "breast_cancer": {"loader": "load_breast_cancer", "type": "classification", "name": "Breast Cancer Wisconsin"},
+    },
+
+    # Mapping from integer IDs to dataset keys within SKLEARN_DATASETS
+    "DATASET_ID_MAP": {
+        1: "diabetes",
+        2: "california_housing",
+        3: "diabetes",  # Defaulting to diabetes for hold-3
+    },
+    
+>>>>>>> fe80ccc (Add dataset mapping and update validation):config.py
     # Optuna optimization parameters
     "OPTUNA": {
         "PREPROCESSING_TRIALS": 50,
@@ -104,6 +123,7 @@ CONFIG = {
     }
 }
 
+<<<<<<< HEAD:auto_optuna/config.py
 # Dataset file mappings
 DATASET_FILES = {
     1: {
@@ -122,3 +142,29 @@ DATASET_FILES = {
         "name": "Hold-1 Full"
     }
 } 
+=======
+# Mapping of dataset IDs to friendly names and optional file paths. The
+# loaders are handled via the SKLEARN_DATASETS configuration above. File
+# paths are left as ``None`` for built-in datasets but the structure allows
+# external CSV files to be specified if needed.
+DATASET_FILES = {
+    1: {
+        "name": CONFIG["SKLEARN_DATASETS"]["diabetes"]["name"],
+        "dataset": "diabetes",
+        "predictors": None,
+        "targets": None,
+    },
+    2: {
+        "name": CONFIG["SKLEARN_DATASETS"]["california_housing"]["name"],
+        "dataset": "california_housing",
+        "predictors": None,
+        "targets": None,
+    },
+    3: {
+        "name": CONFIG["SKLEARN_DATASETS"]["diabetes"]["name"],
+        "dataset": "diabetes",
+        "predictors": None,
+        "targets": None,
+    },
+}
+>>>>>>> fe80ccc (Add dataset mapping and update validation):config.py
