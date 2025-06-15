@@ -4,15 +4,29 @@
 
 **CRITICAL**: This pipeline follows a strict "2 CSVs in → Model out" philosophy. 
 
-- ❌ **NO** configuration files
-- ❌ **NO** user prompts or interactive input
-- ❌ **NO** command-line arguments for data paths
-- ❌ **NO** settings files or user preferences
-- ✅ **YES** to hardcoded dataset numbers
-- ✅ **YES** to automatic operation
-- ✅ **YES** to sensible defaults
+### ❌ ABSOLUTELY FORBIDDEN:
+- **Configuration files** (.config, .cfg, .yaml, .json, .ini, .toml)
+- **User prompts** or interactive input of any kind
+- **Command-line arguments** for data paths, model selection, or parameters
+- **Settings files** or user preferences
+- **Environment variables** for configuration
+- **Flags or toggles** that users must set
+- **Optional parameters** that change behavior
+- **"Choose your model" options**
+- **"Set your target R²" inputs**
+- **"Configure preprocessing" options**
 
-**Why?** This eliminates configuration complexity and ensures reproducible, automated operation.
+### ✅ REQUIRED APPROACH:
+- **Hardcoded dataset numbers** (1, 2, or 3)
+- **Automatic operation** - no human decisions required
+- **Sensible defaults** built into the code
+- **Zero-configuration execution**
+- **Deterministic behavior** - same inputs = same outputs
+
+### 🚨 ENFORCEMENT:
+**ANY PR that introduces user configuration will be IMMEDIATELY REJECTED.**
+
+**Why?** This eliminates configuration complexity and ensures reproducible, automated operation. The moment you add "user choice," you've broken the core principle.
 
 ## 🏗️ Architecture Overview
 
@@ -79,6 +93,10 @@ pytest test_pipeline.py --cov=. --cov-report=html
 
 1. **Run Local Tests**
    ```bash
+   # Check for configuration violations FIRST
+   python validate_no_config.py
+   
+   # Then run tests
    pytest test_pipeline.py -v
    python -m py_compile *.py  # Check syntax
    ```
@@ -103,12 +121,24 @@ pytest test_pipeline.py --cov=. --cov-report=html
 - **Rich Tree Logging** - Maintain structured output format
 - **Thread Safety** - 12-thread CV, 1-thread models
 
-#### ❌ Will Be Rejected
-- **User Configuration** - Any form of config files or user prompts
+#### ❌ Will Be IMMEDIATELY REJECTED
+- **User Configuration** - ANY form of config files, user prompts, flags, or choices
+- **Interactive Features** - Anything requiring user input during execution
+- **Optional Parameters** - Features that can be "turned on/off" by users
+- **Model Selection Menus** - "Choose your algorithm" type features
+- **Preprocessing Options** - "Configure your pipeline" type features
 - **Breaking Changes** - Without explicit approval
 - **Reduced Functionality** - Removing existing features
 - **Poor Performance** - Significant speed/memory regressions
 - **No Tests** - Changes without corresponding tests
+
+#### 🚨 COMMON VIOLATIONS TO WATCH FOR:
+- Adding `argparse` or `click` for command-line options
+- Creating config.yaml, settings.json, or similar files
+- Adding `input()` statements or user prompts
+- Environment variable checks like `os.getenv("MODEL_TYPE")`
+- Conditional logic based on user preferences
+- "If you want X, set flag Y" type features
 
 ### PR Template
 ```markdown
@@ -119,7 +149,10 @@ Brief description of changes
 - [ ] Unit tests pass: `pytest test_pipeline.py -m "not slow"`
 - [ ] Integration tests pass: `pytest test_pipeline.py -m "slow"`
 - [ ] Manual testing completed
-- [ ] No user configuration introduced
+- [ ] **ZERO user configuration introduced** (no config files, flags, prompts, or choices)
+- [ ] Pipeline runs with ZERO user input required
+- [ ] No argparse, click, or command-line argument parsing added
+- [ ] No environment variable dependencies added
 
 ## Performance Impact
 - Memory usage: [No change/Improved/Degraded by X%]
@@ -272,6 +305,72 @@ model = GradientBoostingRegressor(n_estimators=100, n_jobs=1)  # Single thread
 
 ---
 
+## 🛑 FOR PERSISTENT CONFIGURATION VIOLATORS
+
+### If Team Members Keep Adding User Configuration:
+
+**STOP. READ THIS.**
+
+You are violating the core principle of this project. Here's what happens next:
+
+1. **Your PR will be REJECTED immediately**
+2. **You will be asked to read this document again**
+3. **You will be required to explain why configuration is forbidden**
+4. **Repeated violations may result in restricted repository access**
+
+### Common Excuses and Why They're Wrong:
+
+❌ **"But users might want to choose different models"**
+→ NO. The pipeline automatically finds the best model.
+
+❌ **"But users might want different preprocessing"**
+→ NO. The pipeline automatically optimizes preprocessing.
+
+❌ **"But users might want to set their own R² target"**
+→ NO. The pipeline automatically approaches the noise ceiling.
+
+❌ **"But this would make it more flexible"**
+→ NO. Flexibility = Configuration = FORBIDDEN.
+
+❌ **"But other ML libraries do this"**
+→ NO. This is NOT other libraries. This is a zero-config pipeline.
+
+❌ **"But it's just a small flag"**
+→ NO. There are no "small" configuration violations.
+
+### The ONLY Acceptable Changes:
+
+✅ **Bug fixes** that don't add configuration
+✅ **Performance improvements** that don't add configuration  
+✅ **New algorithms** that are automatically selected
+✅ **Better preprocessing** that happens automatically
+✅ **Documentation** improvements
+✅ **Test** additions
+
+### If You Don't Understand Why:
+
+**Re-read the entire AGENTS.md file until you understand that this pipeline is designed to be ZERO-CONFIGURATION by design. This is not a limitation - it's the core feature.**
+
+### 🛠️ Configuration Violation Detector
+
+**BEFORE EVERY COMMIT, RUN:**
+```bash
+python validate_no_config.py
+```
+
+This script will automatically detect:
+- ❌ Forbidden imports (argparse, click, etc.)
+- ❌ Configuration files (.yaml, .json, etc.)
+- ❌ User interaction code (input() statements)
+- ❌ Environment variable configuration
+- ❌ Command-line argument processing
+
+**If this script finds violations, FIX THEM before committing.**
+
+---
+
 ## ⚠️ Remember: 2 CSVs in → Model out. Nothing more, nothing less.
 
 Any deviation from this principle will result in PR rejection. Keep it simple, keep it automated, keep it working.
+
+**If you add configuration, you have fundamentally misunderstood the project.**

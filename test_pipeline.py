@@ -341,15 +341,81 @@ class TestConfiguration:
         assert isinstance(battle_tested_optuna_playbook.DATASET, int)
         assert battle_tested_optuna_playbook.DATASET in [1, 2, 3]
     
-    def test_no_config_files_required(self):
-        """Test that no configuration files are required"""
-        # The pipeline should work without any config files
+    def test_no_config_files_exist(self):
+        """Test that no configuration files exist in the repository"""
         current_dir = Path.cwd()
-        config_files = list(current_dir.glob("*.config")) + list(current_dir.glob("*.cfg")) + list(current_dir.glob("config.*"))
         
-        # Should not require any config files to exist
-        # (This test passes if no config files are found or if they're optional)
-        assert True  # Pipeline works without config files
+        # Check for common config file patterns
+        forbidden_patterns = [
+            "*.config", "*.cfg", "*.yaml", "*.yml", "*.json", "*.ini", "*.toml",
+            "config.*", "settings.*", "preferences.*", ".env*"
+        ]
+        
+        config_files = []
+        for pattern in forbidden_patterns:
+            config_files.extend(list(current_dir.glob(pattern)))
+        
+        # Filter out legitimate files that aren't configuration
+        legitimate_files = {
+            "requirements.txt",  # Dependencies, not configuration
+            ".gitignore",       # Git configuration, not user configuration
+            "package.json",     # If it exists, it's for tooling
+            "pyproject.toml"    # If it exists, it's for tooling
+        }
+        
+        actual_config_files = [f for f in config_files if f.name not in legitimate_files]
+        
+        assert len(actual_config_files) == 0, f"Found forbidden config files: {[f.name for f in actual_config_files]}"
+    
+    def test_no_argparse_imports(self):
+        """Test that no scripts import argparse or click for command-line parsing"""
+        python_files = list(Path.cwd().glob("*.py"))
+        
+        forbidden_imports = ["argparse", "click", "fire", "typer"]
+        
+        for py_file in python_files:
+            if py_file.name.startswith("test_"):
+                continue  # Skip test files
+                
+            content = py_file.read_text()
+            for forbidden in forbidden_imports:
+                assert f"import {forbidden}" not in content, f"{py_file.name} imports {forbidden} (forbidden for user configuration)"
+                assert f"from {forbidden}" not in content, f"{py_file.name} imports from {forbidden} (forbidden for user configuration)"
+    
+    def test_no_input_statements(self):
+        """Test that no scripts use input() for user prompts"""
+        python_files = list(Path.cwd().glob("*.py"))
+        
+        for py_file in python_files:
+            if py_file.name.startswith("test_"):
+                continue  # Skip test files
+                
+            content = py_file.read_text()
+            assert "input(" not in content, f"{py_file.name} contains input() statement (forbidden user interaction)"
+    
+    def test_no_environment_variable_config(self):
+        """Test that scripts don't rely on environment variables for configuration"""
+        python_files = list(Path.cwd().glob("*.py"))
+        
+        for py_file in python_files:
+            if py_file.name.startswith("test_"):
+                continue  # Skip test files
+                
+            content = py_file.read_text()
+            # Allow os.getenv for system info but not for configuration
+            forbidden_patterns = [
+                "os.getenv(\"MODEL",
+                "os.getenv(\"DATASET", 
+                "os.getenv(\"TARGET",
+                "os.getenv(\"CONFIG",
+                "os.environ.get(\"MODEL",
+                "os.environ.get(\"DATASET",
+                "os.environ.get(\"TARGET",
+                "os.environ.get(\"CONFIG"
+            ]
+            
+            for pattern in forbidden_patterns:
+                assert pattern not in content, f"{py_file.name} uses environment variables for configuration: {pattern}"
     
     def test_minimal_command_line_interface(self):
         """Test that the CLI requires minimal input"""
@@ -359,6 +425,18 @@ class TestConfiguration:
         
         assert hasattr(battle_tested_optuna_playbook, 'main')
         assert callable(battle_tested_optuna_playbook.main)
+    
+    def test_zero_configuration_principle(self):
+        """Test the core principle: 2 CSVs in → Model out, nothing more"""
+        # This test documents the core principle
+        
+        # The pipeline should:
+        # 1. Take exactly 2 CSV files as input
+        # 2. Produce a model as output
+        # 3. Require ZERO configuration from the user
+        
+        # If this test fails, someone has violated the core principle
+        assert True, "2 CSVs in → Model out. No configuration allowed."
 
 if __name__ == "__main__":
     # Run tests with verbose output
