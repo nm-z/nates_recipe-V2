@@ -9,6 +9,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.metrics.pairwise import pairwise_kernels
 
 class KMeansOutlierTransformer(BaseEstimator, TransformerMixin):
     """Remove outliers via K-means clustering"""
@@ -43,13 +44,81 @@ class KMeansOutlierTransformer(BaseEstimator, TransformerMixin):
         return self.mask_
 
 
+class OutlierFilterTransformer(BaseEstimator, TransformerMixin):
+    """Filter out clusters smaller than a minimum size ratio."""
+
+    def __init__(self, n_clusters=3, min_cluster_size_ratio=0.1, remove=True):
+        self.n_clusters = n_clusters
+        self.min_cluster_size_ratio = min_cluster_size_ratio
+        self.remove = remove
+        self.kmeans = None
+        self.valid_clusters_ = None
+        self.outlier_indices_ = None
+
+    def fit(self, X, y=None):
+        del y  # Not used
+        self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
+        labels = self.kmeans.fit_predict(X)
+        counts = np.bincount(labels)
+        min_size = int(len(X) * self.min_cluster_size_ratio)
+        self.valid_clusters_ = np.where(counts >= min_size)[0]
+        mask = np.isin(labels, self.valid_clusters_)
+        self.outlier_indices_ = np.where(~mask)[0]
+        self.mask_ = mask
+        return self
+
+    def transform(self, X):
+        labels = self.kmeans.predict(X)
+        mask = np.isin(labels, self.valid_clusters_)
+        if self.remove:
+            return X[mask]
+        return X
+
+    def get_support_mask(self):
+        return self.mask_
+
+
+class HSICFeatureSelector(BaseEstimator, TransformerMixin):
+    """Select top-k features using a simplified HSIC criterion."""
+
+    def __init__(self, k=10, gamma=1.0):
+        self.k = k
+        self.gamma = gamma
+        self.selected_features_ = None
+        self.scores_ = None
+
+    def _compute_hsic(self, X, y):
+        n = X.shape[0]
+        H = np.eye(n) - np.ones((n, n)) / n
+        Ky = pairwise_kernels(y.reshape(-1, 1), metric="rbf", gamma=self.gamma)
+        scores = []
+        for i in range(X.shape[1]):
+            Kx = pairwise_kernels(X[:, i].reshape(-1, 1), metric="rbf", gamma=self.gamma)
+            hsic = np.trace(Kx @ H @ Ky @ H) / (n - 1) ** 2
+            scores.append(hsic)
+        return np.array(scores)
+
+    def fit(self, X, y):
+        X = np.asarray(X)
+        y = np.asarray(y)
+        self.scores_ = self._compute_hsic(X, y)
+        idx = np.argsort(self.scores_)[::-1]
+        self.selected_features_ = idx[: self.k]
+        return self
+
+    def transform(self, X):
+        return X[:, self.selected_features_]
+
+
+
 class IsolationForestTransformer(BaseEstimator, TransformerMixin):
     """Remove outliers via Isolation Forest"""
-    
-    def __init__(self, contamination=0.1, n_estimators=100, random_state=42):
+
+    def __init__(self, contamination=0.1, n_estimators=100, random_state=42, remove=False):
         self.contamination = contamination
         self.n_estimators = n_estimators
         self.random_state = random_state
+        self.remove = remove
         self.iforest = None
         self.mask_ = None
     
@@ -63,12 +132,13 @@ class IsolationForestTransformer(BaseEstimator, TransformerMixin):
         )
         labels = self.iforest.fit_predict(X)
         self.mask_ = labels != -1
+        self.outlier_indices_ = np.where(labels == -1)[0]
         return self
     
     def transform(self, X):
         labels = self.iforest.predict(X)
         mask = labels != -1
-        return X[mask]
+        return X[mask] if self.remove else X
     
     def get_support_mask(self):
         return self.mask_
@@ -76,10 +146,11 @@ class IsolationForestTransformer(BaseEstimator, TransformerMixin):
 
 class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
     """Remove outliers via Local Outlier Factor"""
-    
-    def __init__(self, n_neighbors=20, contamination=0.1):
+
+    def __init__(self, n_neighbors=20, contamination=0.1, remove=False):
         self.n_neighbors = n_neighbors
         self.contamination = contamination
+        self.remove = remove
         self.lof = None
         self.mask_ = None
     
@@ -93,10 +164,11 @@ class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
         )
         labels = self.lof.fit_predict(X)
         self.mask_ = labels != -1
+        self.outlier_indices_ = np.where(labels == -1)[0]
         return self
     
     def transform(self, X):
-        return X[self.mask_]
+        return X[self.mask_] if self.remove else X
     
     def get_support_mask(self):
         return self.mask_
