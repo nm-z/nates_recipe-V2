@@ -321,21 +321,37 @@ def print_results_summary(results: dict, dataset_num: int):
                 print(f"📈 {Colors.BLUE}Room for improvement{Colors.END}")
 
 
-def validate_dataset_files(dataset_id: int):
+def validate_dataset_files(dataset_name: str):
+    """Validate that a dataset is available for loading.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset as defined in ``CONFIG['SKLEARN_DATASETS']``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the dataset configuration exists and any associated files
+        (for external datasets) are present.
     """
-    Validate that dataset files exist.
-    
-    Args:
-        dataset_id: Dataset identifier
-        
-    Returns:
-        bool: True if files exist, False otherwise
-    """
-    if dataset_id not in CONFIG["SKLEARN_DATASETS"]:
+    if dataset_name not in CONFIG["SKLEARN_DATASETS"]:
         return False
-    
-    dataset_info = CONFIG["SKLEARN_DATASETS"][dataset_id]
+
+    dataset_info = CONFIG["SKLEARN_DATASETS"][dataset_name]
+
+    # When using scikit-learn built-in datasets there are no external files to
+    # validate. The keys ``predictors`` and ``targets`` are optional and may be
+    # ``None`` for built-in datasets.
+    predictor_file = dataset_info.get("predictors")
+    target_file = dataset_info.get("targets")
+
     predictor_exists = True
     target_exists = True
-    
-    return predictor_exists and target_exists 
+
+    if predictor_file:
+        predictor_exists = Path(predictor_file).exists()
+    if target_file:
+        target_exists = Path(target_file).exists()
+
+    return predictor_exists and target_exists
