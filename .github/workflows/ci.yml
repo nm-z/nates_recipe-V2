@@ -131,6 +131,11 @@ jobs:
         mypy --ignore-missing-imports *.py || echo "Type checking issues found (non-blocking)"
       continue-on-error: true
 
+    - name: Lint with Pylint (score > 9 required)
+      run: |
+        pip install pylint
+        pylint $(git ls-files '*.py') --fail-under=9
+
   security:
     runs-on: ubuntu-latest
     steps:
