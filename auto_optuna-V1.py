@@ -275,6 +275,8 @@ class BattleTestedOptimizer:
         self.preprocessing_pipeline = None
         self.iteration_count = 0
         self.ceiling_history = []
+        self.ceiling_epsilon = 0.001  # Convergence threshold for ceiling
+        self.stop_after_optuna = False
         
         # NEW: Pipeline for noise ceiling evaluation and trial tracking
         self.ridge_ceiling_pipe = Pipeline([
@@ -1094,7 +1096,20 @@ class BattleTestedOptimizer:
                 self.logger.info(msg)
                 self.logger.info("Best model: %s", self.study.best_trial.user_attrs.get('model_type', 'N/A'))
                 self.logger.info("Best params: %s", self.study.best_params)
-                
+
+                # Update noise ceiling based on best trial CV scores
+                scores = np.array(self.study.best_trial.user_attrs.get('cv_scores', []))
+                if scores.size > 0:
+                    new_ceiling = np.mean(scores) + 2 * np.std(scores)
+                    delta = new_ceiling - self.noise_ceiling if self.noise_ceiling is not None else new_ceiling
+                    self.noise_ceiling = new_ceiling
+                    self.ceiling_history.append(new_ceiling)
+                    self.logger.info("Updated ceiling from Optuna best trial: %.4f", new_ceiling)
+                    self.logger.info("Ceiling delta: %.4f", delta)
+                    if delta < self.ceiling_epsilon:
+                        self.logger.info("🛑 Ceiling converged within epsilon %.4f", self.ceiling_epsilon)
+                        self.stop_after_optuna = True
+
                 return best_value >= self.target_r2
             else:
                 self.logger.warning("No trials completed successfully")
@@ -1404,9 +1419,13 @@ class BattleTestedOptimizer:
             
             # Step 5: Final evaluation
             eval_results = self.step_5_final_evaluation()
-            
+
             # Create summary table
             self.create_optimization_summary_table()
+
+            if self.stop_after_optuna:
+                self.logger.info("🛑 Early stop triggered by ceiling convergence after Optuna")
+                break
             
             # Track best overall result
             if eval_results and eval_results['test_r2'] > best_overall_r2:
