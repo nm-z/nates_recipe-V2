@@ -1,99 +1,70 @@
-"""
-Main Entry Point
-===============
-Main script for running ML optimization on different datasets.
+"""Simple entry points for running the optimisation pipeline.
+
+This module intentionally avoids any command-line configuration in
+order to honour the project's zero‑configuration principle.  A single
+``main()`` function runs the default dataset, while convenience
+functions allow explicit execution of the three supported datasets.
 """
 
-import argparse
-import sys
-from pathlib import Path
+from __future__ import annotations
 
 from .config import CONFIG, DATASET_FILES, Colors
 from .utils import load_dataset, validate_dataset_files
 from .optimizer import SystematicOptimizer, BattleTestedOptimizer
 
+DEFAULT_DATASET = CONFIG["DATASET"]["DEFAULT"]
 
-def main():
-    """Main entry point for auto_optuna package."""
-    parser = argparse.ArgumentParser(description='Auto Optuna ML Optimization')
-    parser.add_argument('--dataset', type=int, default=1, choices=[1, 2, 3],
-                       help='Dataset to use (1=Hold-1, 2=Hold-2, 3=Hold-1 Full)')
-    parser.add_argument('--optimizer', type=str, default='systematic', 
-                       choices=['systematic', 'battle_tested'],
-                       help='Optimizer type to use')
-    parser.add_argument('--trials', type=int, default=None,
-                       help='Number of optimization trials')
-    parser.add_argument('--target-r2', type=float, default=0.93,
-                       help='Target R² for battle-tested optimizer')
-    
-    args = parser.parse_args()
-    
-    # Validate dataset files exist
-    if not validate_dataset_files(args.dataset):
-        print(f"{Colors.RED}❌ Dataset {args.dataset} files not found!{Colors.END}")
-        print(f"Expected files: {DATASET_FILES[args.dataset]['predictors']}, {DATASET_FILES[args.dataset]['targets']}")
-        sys.exit(1)
-    
-    # Load dataset
-    print(f"{Colors.BOLD}{Colors.CYAN}🚀 Starting Auto Optuna Optimization{Colors.END}")
-    print(f"Dataset: {DATASET_FILES[args.dataset]['name']}")
-    print(f"Optimizer: {args.optimizer}")
-    
-    X, y = load_dataset(args.dataset)
-    
-    # Initialize optimizer
-    if args.optimizer == 'systematic':
-        optimizer = SystematicOptimizer(
-            dataset_num=args.dataset,
-            max_hyperopt_trials=args.trials
+
+def _run(dataset_num: int, optimizer_type: str = "systematic", trials: int | None = None,
+         target_r2: float | None = None) -> dict:
+    """Execute the optimisation pipeline for a given dataset."""
+
+    if not validate_dataset_files(dataset_num):
+        raise FileNotFoundError(
+            f"Dataset {dataset_num} files missing: {DATASET_FILES[dataset_num]}"
         )
+
+    print(f"{Colors.BOLD}{Colors.CYAN}🚀 Starting Auto Optuna Optimisation{Colors.END}")
+    print(f"Dataset: {DATASET_FILES[dataset_num]['name']}")
+    print(f"Optimizer: {optimizer_type}")
+
+    X, y = load_dataset(dataset_num)
+
+    if optimizer_type == "systematic":
+        optimizer = SystematicOptimizer(dataset_num=dataset_num,
+                                        max_hyperopt_trials=trials)
         results = optimizer.run_systematic_optimization(X, y)
-    
-    elif args.optimizer == 'battle_tested':
+    else:
         optimizer = BattleTestedOptimizer(
-            dataset_num=args.dataset,
-            target_r2=args.target_r2,
-            max_trials=args.trials or CONFIG["OPTUNA"]["MAX_TRIALS_BATTLE_TESTED"]
+            dataset_num=dataset_num,
+            target_r2=target_r2 or CONFIG["THRESHOLDS"]["TARGET_R2"],
+            max_trials=trials or CONFIG["OPTUNA"]["MAX_TRIALS_BATTLE_TESTED"],
         )
         results = optimizer.run_optimization(X, y)
-    
-    print(f"\n{Colors.BOLD}{Colors.GREEN}🎉 Optimization Complete!{Colors.END}")
+
+    print(f"\n{Colors.BOLD}{Colors.GREEN}🎉 Optimisation Complete!{Colors.END}")
     return results
 
 
-def run_hold1():
-    """Convenience function to run Hold 1 optimization."""
-    # Override sys.argv to run Hold 1
-    original_argv = sys.argv
-    sys.argv = ['auto_optuna', '--dataset', '1', '--optimizer', 'systematic']
-    
-    try:
-        return main()
-    finally:
-        sys.argv = original_argv
+def main() -> dict:
+    """Run the pipeline using the default dataset."""
+    return _run(DEFAULT_DATASET)
 
 
-def run_hold2():
-    """Convenience function to run Hold 2 optimization."""
-    original_argv = sys.argv
-    sys.argv = ['auto_optuna', '--dataset', '2', '--optimizer', 'systematic']
-    
-    try:
-        return main()
-    finally:
-        sys.argv = original_argv
+def run_hold1() -> dict:
+    """Run optimisation on Hold‑1 dataset."""
+    return _run(1)
 
 
-def run_hold3():
-    """Convenience function to run Hold 3 optimization."""
-    original_argv = sys.argv
-    sys.argv = ['auto_optuna', '--dataset', '3', '--optimizer', 'systematic']
-    
-    try:
-        return main()
-    finally:
-        sys.argv = original_argv
+def run_hold2() -> dict:
+    """Run optimisation on Hold‑2 dataset."""
+    return _run(2)
+
+
+def run_hold3() -> dict:
+    """Run optimisation on Hold‑3 (full) dataset."""
+    return _run(3)
 
 
 if __name__ == "__main__":
-    main() 
+    main()
