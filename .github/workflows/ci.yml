@@ -131,6 +131,11 @@ jobs:
         mypy --ignore-missing-imports *.py || echo "Type checking issues found (non-blocking)"
       continue-on-error: true
 
+    - name: Run pylint (BLOCKING)
+      run: |
+        pip install pylint
+        pylint --rcfile=.pylintrc auto_optuna/ *.py --score=yes --fail-under=9.0
+
   security:
     runs-on: ubuntu-latest
     steps:

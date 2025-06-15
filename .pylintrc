@@ -1,0 +1,57 @@
+[MASTER]
+
+# Specify the minimum score a project should get to pass.
+fail-under=9.0
+
+[MESSAGES CONTROL]
+
+# Disable specific messages by their symbolic names or IDs.
+disable=
+    C0114, # Missing module docstring
+    C0115, # Missing class docstring
+    C0116, # Missing function or method docstring
+    R0903, # Too few public methods
+    R0913, # Too many arguments
+    W0613, # Unused argument
+    E1101, # No member
+    E0401, # Missing import
+    W0703, # Broad exception clause
+    R0914, # Too many local variables
+    C0301, # Line too long
+    W0212, # Access to a protected member
+    W0603, # Using the global statement
+    R1705, # Unnecessary else after return
+    R0902, # Too many instance attributes
+    C0200, # Consider using enumerate instead of 'range(len())'
+    W0105, # Pointless string statement
+    W1203, # Use % formatting in logging functions
+    W1201, # Old-style string formatting in logging functions
+    E0611, # No name in module
+    W0611, # Unused import
+    C0415, # Import outside top of file
+    R1721, # Unnecessary comprehension
+    E0704, # Except AssertionError
+
+[FORMAT]
+
+# Maximum number of characters on a line (default: 100).
+max-line-length=127
+
+[TYPECHECK]
+# List of members that are set dynamically and pylint should not complain about.
+# This is typically used for attributes that are added outside of __init__.
+generated-members=
+    DataFrame.iloc,
+    DataFrame.loc,
+    Series.iloc,
+    Series.loc,
+    Path.mkdir,
+    Path.stem,
+    Path.suffix,
+    Path.with_name,
+    Path.read_text,
+    Path.write_text,
+    Path.iterdir,
+    Path.glob,
+    Path.is_file,
+    Path.is_dir 

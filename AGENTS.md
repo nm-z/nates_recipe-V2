@@ -374,3 +374,8 @@ This script will automatically detect:
 Any deviation from this principle will result in PR rejection. Keep it simple, keep it automated, keep it working.
 
 **If you add configuration, you have fundamentally misunderstood the project.**
+
+### Code Quality Requirements
+- **Pylint Score**: Must achieve > 9.0/10 before PR approval
+- **Pylint Configuration**: Use project .pylintrc file
+- **CI Enforcement**: PRs automatically rejected if pylint score < 9.0
