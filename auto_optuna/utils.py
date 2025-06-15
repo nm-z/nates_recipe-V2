@@ -277,5 +277,5 @@ def validate_dataset_files(dataset_id: int):
     files = DATASET_FILES[dataset_id]
     predictor_exists = Path(files["predictors"]).exists()
     target_exists = Path(files["targets"]).exists()
-    
-    return predictor_exists and target_exists 
+
+    return predictor_exists and target_exists

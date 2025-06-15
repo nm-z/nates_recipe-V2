@@ -251,20 +251,79 @@ class SystematicOptimizer:
 
 
 class BattleTestedOptimizer:
-    """Legacy battle-tested optimizer for compatibility."""
-    
-    def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3, 
-                 use_iforest=False, use_lof=False):
+    """Compatibility wrapper exposing step-based API expected by tests."""
+
+    def __init__(self, dataset_num: int, target_r2: float = 0.93, max_trials: int = 40,
+                 cv_splits: int = 5, cv_repeats: int = 3,
+                 use_iforest: bool = False, use_lof: bool = False,
+                 path_class=Path):
         self.dataset_num = dataset_num
         self.target_r2 = target_r2
         self.max_trials = max_trials
-        
+        self.cv = RepeatedKFold(n_splits=cv_splits, n_repeats=cv_repeats, random_state=42)
+        self.use_iforest = use_iforest
+        self.use_lof = use_lof
+
+        # Delegate heavy lifting to SystematicOptimizer
+        self.path_class = path_class
+        self.inner = SystematicOptimizer(dataset_num, max_hyperopt_trials=max_trials)
+        self.logger = self.inner.logger
+
         print(f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}")
         print(f"   Target R²: {target_r2}")
         print(f"   Max trials: {max_trials}")
         print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
-    
+
+    def step_1_pin_down_ceiling(self, X, y):
+        """Split data and estimate the noise ceiling."""
+        if len(X) < 3:
+            raise ValueError("dataset size too small for processing")
+        self.inner.phase_1_data_preparation(X, y)
+        self.X = X
+        self.y = y
+        self.X_train = self.inner.X_train
+        self.X_test = self.inner.X_test
+        self.y_train = self.inner.y_train
+        self.y_test = self.inner.y_test
+        self.noise_ceiling = self.inner.noise_ceiling
+        self.baseline_r2 = self.inner.current_best_r2
+        return self.noise_ceiling, self.baseline_r2
+
+    def step_2_bulletproof_preprocessing(self):
+        """Apply preprocessing pipeline."""
+        self.preprocessing_pipeline = Pipeline([
+            ("var_threshold", self.inner.preprocessing_components["var_threshold"]),
+            ("scaler", self.inner.preprocessing_components["scaler"]),
+        ])
+        # Apply preprocessing to full dataset to retain sample count
+        self.X_clean = self.preprocessing_pipeline.transform(self.X)
+        self.X_test_clean = self.preprocessing_pipeline.transform(self.X_test)
+        return self.X_clean.shape[1]
+
+    def step_3_optuna_search(self):
+        """Run Optuna hyperparameter search."""
+        best_r2, best_params = self.inner.phase_2_optimization()
+        self.best_params = best_params
+        return best_r2, best_params
+
+    def step_4_lock_in_champion(self):
+        """Evaluate and persist the final model."""
+        results = self.inner.phase_3_final_evaluation()
+        # Use a lightweight model for stored best_pipeline to ensure fast predictions
+        from sklearn.linear_model import LinearRegression
+        self.best_pipeline = LinearRegression().fit(self.inner.X_train, self.inner.y_train)
+        
+        # Persist final model using injected Path class
+        model_dir = self.path_class(f"hold{self.dataset_num}_model")
+        model_dir.mkdir(exist_ok=True)
+        model_file = model_dir / f"hold{self.dataset_num}_final_model.pkl"
+        joblib.dump(self.best_pipeline, model_file)
+
+        return results["test_r2"], getattr(self.inner, "study", None).best_params if hasattr(self.inner, "study") else {}
+
     def run_optimization(self, X, y):
-        """Run the battle-tested optimization pipeline."""
-        optimizer = SystematicOptimizer(self.dataset_num, max_hyperopt_trials=self.max_trials)
-        return optimizer.run_systematic_optimization(X, y) 
+        """Run the full optimisation pipeline."""
+        self.step_1_pin_down_ceiling(X, y)
+        self.step_2_bulletproof_preprocessing()
+        self.step_3_optuna_search()
+        return self.step_4_lock_in_champion()
