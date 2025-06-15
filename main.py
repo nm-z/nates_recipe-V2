@@ -8,9 +8,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from .config import CONFIG, DATASET_FILES, Colors
-from .utils import load_dataset, validate_dataset_files
-from .optimizer import SystematicOptimizer, BattleTestedOptimizer
+from config import CONFIG, Colors
+from utils import load_dataset, validate_dataset_files
+from optimizer import SystematicOptimizer, BattleTestedOptimizer
 
 
 def main():

@@ -10,7 +10,7 @@ import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from .config import CONFIG, Colors
+from config import CONFIG, Colors
 from sklearn.datasets import (
     load_iris,
     load_diabetes,

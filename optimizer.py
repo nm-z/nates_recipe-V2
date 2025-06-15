@@ -32,9 +32,9 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import optuna
 from optuna.pruners import MedianPruner
 
-from .config import CONFIG, Colors
-from .transformers import KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
-from .utils import (
+from config import CONFIG, Colors
+from transformers import KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
+from utils import (
     setup_logging,
     save_model_artifacts,
     create_diagnostic_plots,
