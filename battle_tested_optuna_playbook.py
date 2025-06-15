@@ -266,17 +266,27 @@ class BattleTestedOptimizer:
             pipe = Pipeline(steps)
             
             # Cross-validation scoring
-            scores = cross_val_score(pipe, self.X_clean, self.y, cv=self.cv, scoring='r2', n_jobs=12)
+            scores = cross_val_score(
+                pipe,
+                self.X_clean,
+                self.y,
+                cv=self.cv,
+                scoring="r2",
+                n_jobs=12,
+            )
             scores = scores[np.isfinite(scores)]  # Remove any inf/nan values
-            
+
             if len(scores) == 0:
                 raise optuna.exceptions.TrialPruned()
-                
+
             mean_score = np.mean(scores)
             std_score = np.std(scores)
-            
+
+            # Tunable prune threshold
+            prune_floor = trial.suggest_float("prune_floor", -3.0, -0.5)
+
             # Early failure safety net
-            if mean_score < -2.0:  # Model performing much worse than predicting mean
+            if mean_score < prune_floor:  # Model performing much worse than predicting mean
                 raise optuna.exceptions.TrialPruned()
             
             # Store additional metrics and pipeline
