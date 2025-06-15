@@ -13,6 +13,24 @@ import seaborn as sns
 from pathlib import Path
 from .config import CONFIG, DATASET_FILES, Colors
 
+
+def _load_dataset(dataset_id: int):
+    """Internal helper replicating the dataset loader from v1.3 script."""
+    if dataset_id not in DATASET_FILES:
+        raise ValueError(
+            f"Invalid dataset ID: {dataset_id}. Must be 1, 2, or 3"
+        )
+
+    files = DATASET_FILES[dataset_id]
+
+    X = pd.read_csv(files["predictors"], header=None).values.astype(np.float32)
+    y = (
+        pd.read_csv(files["targets"], header=None)
+        .values.astype(np.float32)
+        .ravel()
+    )
+    return X, y
+
 def load_dataset(dataset_id: int):
     """
     Load dataset based on ID.
@@ -23,21 +41,18 @@ def load_dataset(dataset_id: int):
     Returns:
         tuple: (X, y) arrays
     """
-    if dataset_id not in DATASET_FILES:
-        raise ValueError(f"Invalid dataset ID: {dataset_id}. Must be 1, 2, or 3")
-    
-    files = DATASET_FILES[dataset_id]
-    
     try:
-        X = pd.read_csv(files["predictors"], header=None).values.astype(np.float32)
-        y = pd.read_csv(files["targets"], header=None).values.astype(np.float32).ravel()
-        
-        print(f"{Colors.GREEN}✅ Loaded {files['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}")
+        X, y = _load_dataset(dataset_id)
+        files = DATASET_FILES[dataset_id]
+        print(
+            f"{Colors.GREEN}✅ Loaded {files['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}"
+        )
         return X, y
-        
     except FileNotFoundError as e:
+        files = DATASET_FILES.get(dataset_id, {})
         print(f"{Colors.RED}❌ Dataset files not found: {e}{Colors.END}")
-        print(f"Expected files: {files['predictors']}, {files['targets']}")
+        if files:
+            print(f"Expected files: {files['predictors']}, {files['targets']}")
         raise
 
 
