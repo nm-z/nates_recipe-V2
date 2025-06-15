@@ -126,10 +126,3 @@ When contributing to this project:
 4. Preserve all existing functionality unless explicitly requested to change
 5. Save all artifacts and maintain comprehensive logging
 
-## License
-
-[Add your license information here]
-
-## Contact
-
-[Add your contact information here] 
