@@ -486,32 +486,47 @@ class BattleTestedOptimizer:
             ('scale', scaler)
         ]
         
-        # Enhanced dimensionality reduction options (removed IPCA due to batch issues)
-        dim_red_choice = trial.suggest_categorical('dim_red', ['none', 'pca', 'kpca', 'svd'])
-        
-        if dim_red_choice == 'pca':
+        # Optional dimensionality reduction steps
+        use_pca = trial.suggest_categorical('use_pca', [False, True])
+        use_kpca = trial.suggest_categorical('use_kpca', [False, True])
+        use_ipca = trial.suggest_categorical('use_ipca', [False, True])
+        use_svd = trial.suggest_categorical('use_svd', [False, True])
+
+        dim_red_used = []
+
+        if use_pca:
             max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('pca_components', 10, max_components)
-            steps.append(('dim_red', PCA(n_components=n_components, random_state=42)))
-            
-        elif dim_red_choice == 'kpca':
+            n_components = trial.suggest_int('pca_n_components', 10, max_components)
+            steps.append(('pca', PCA(n_components=n_components, random_state=42)))
+            dim_red_used.append('pca')
+
+        if use_kpca:
             max_components = min(30, max(10, min(self.X.shape) - 10))  # More conservative for KernelPCA
-            n_components = trial.suggest_int('kpca_components', 10, max_components)
-            kernel = trial.suggest_categorical('kpca_kernel', ['rbf', 'poly'])  # Remove sigmoid to avoid issues
-            
+            n_components = trial.suggest_int('kpca_n_components', 10, max_components)
+            kernel = trial.suggest_categorical('kpca_kernel', ['rbf', 'poly'])
             if kernel == 'rbf':
                 gamma = trial.suggest_float('kpca_gamma', 1e-4, 1e-1, log=True)
                 kpca = KernelPCA(n_components=n_components, kernel=kernel, gamma=gamma, random_state=42, n_jobs=-1)
-            elif kernel == 'poly':
-                degree = trial.suggest_int('kpca_degree', 2, 3)  # More conservative degree
+            else:
+                degree = trial.suggest_int('kpca_degree', 2, 3)
                 kpca = KernelPCA(n_components=n_components, kernel=kernel, degree=degree, random_state=42, n_jobs=-1)
-            
-            steps.append(('dim_red', kpca))
-            
-        elif dim_red_choice == 'svd':
+            steps.append(('kpca', kpca))
+            dim_red_used.append('kpca')
+
+        if use_ipca:
             max_components = min(50, max(10, min(self.X.shape) - 10))
-            n_components = trial.suggest_int('svd_components', 10, max_components)
-            steps.append(('dim_red', TruncatedSVD(n_components=n_components, random_state=42)))
+            n_components = trial.suggest_int('ipca_n_components', 10, max_components)
+            batch_size = trial.suggest_int('ipca_batch_size', 10, 200)
+            steps.append(('ipca', IncrementalPCA(n_components=n_components, batch_size=batch_size)))
+            dim_red_used.append('ipca')
+
+        if use_svd:
+            max_components = min(50, max(10, min(self.X.shape) - 10))
+            n_components = trial.suggest_int('svd_n_components', 10, max_components)
+            steps.append(('svd', TruncatedSVD(n_components=n_components, random_state=42)))
+            dim_red_used.append('svd')
+
+        trial.set_user_attr('dim_red', '+'.join(dim_red_used) if dim_red_used else 'none')
         
         # Enhanced feature selection
         feat_sel_choice = trial.suggest_categorical('feat_sel', ['mi', 'hsic', 'f', 'rfecv'])
@@ -1261,13 +1276,15 @@ class BattleTestedOptimizer:
         
         for i, trial in enumerate(completed_trials[:5]):
             # Dimensionality reduction info
-            dim_red = trial.params.get('dim_red', 'none')
-            if dim_red == 'pca':
-                dim_info = f"PCA({trial.params.get('pca_components', 'N/A')})"
-            elif dim_red == 'kpca':
-                dim_info = f"KPCA({trial.params.get('kpca_components', 'N/A')})"
-            elif dim_red == 'svd':
-                dim_info = f"SVD({trial.params.get('svd_components', 'N/A')})"
+            dim_red = trial.user_attrs.get('dim_red', 'none')
+            if 'pca' in dim_red:
+                dim_info = f"PCA({trial.params.get('pca_n_components', 'N/A')})"
+            elif 'kpca' in dim_red:
+                dim_info = f"KPCA({trial.params.get('kpca_n_components', 'N/A')})"
+            elif 'ipca' in dim_red:
+                dim_info = f"IPCA({trial.params.get('ipca_n_components', 'N/A')})"
+            elif 'svd' in dim_red:
+                dim_info = f"SVD({trial.params.get('svd_n_components', 'N/A')})"
             else:
                 dim_info = "None"
             
@@ -1291,8 +1308,8 @@ class BattleTestedOptimizer:
         print("-" * 50)
         
         # Analyze dimensionality reduction impact
-        pca_trials = [t for t in completed_trials if t.params.get('dim_red') == 'pca']
-        no_dimred_trials = [t for t in completed_trials if t.params.get('dim_red') == 'none']
+        pca_trials = [t for t in completed_trials if 'pca' in t.user_attrs.get('dim_red', '')]
+        no_dimred_trials = [t for t in completed_trials if t.user_attrs.get('dim_red', 'none') == 'none']
         
         if pca_trials and no_dimred_trials:
             pca_mean = np.mean([t.value for t in pca_trials])
