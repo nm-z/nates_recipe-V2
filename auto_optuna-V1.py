@@ -8,6 +8,10 @@ Pushes theoretical accuracy limits on datasets using:
 - Cross-validation with multiple model types
 - Strategic Optuna optimization until target R² achieved
 - Statistical significance testing with bootstrap
+
+This is the original version of the auto-optuna workflow. Later revisions add
+extra phases and configuration options. See `docs/optuna_scripts_overview.md`
+for a full comparison of available scripts.
 """
 
 # =============================================================================
