@@ -252,8 +252,10 @@ class BattleTestedOptimizer:
         """Optuna objective function - exact recipe implementation"""
         try:
             # Pipeline for every trial as specified in recipe
+            q_low = trial.suggest_int('robust_q_low', 1, 25)
+            q_high = trial.suggest_int('robust_q_high', 75, 99)
             steps = [
-                ('scale', RobustScaler()),
+                ('scale', RobustScaler(quantile_range=(q_low, q_high))),
                 ('reduce', SelectKBest(
                     mutual_info_regression,
                     k=trial.suggest_int('k', 10, 500) if self.X_clean.shape[1] > 10000 else trial.suggest_int('k', 10, 100)
