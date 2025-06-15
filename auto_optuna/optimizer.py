@@ -33,8 +33,18 @@ import optuna
 from optuna.pruners import MedianPruner
 
 from .config import CONFIG, Colors
-from .transformers import KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
-from .utils import setup_logging, save_model_artifacts, create_diagnostic_plots, print_results_summary
+from .transformers import (
+    KMeansOutlierTransformer,
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+)
+from .utils import (
+    setup_logging,
+    save_model_artifacts,
+    create_diagnostic_plots,
+    print_results_summary,
+    estimate_noise_ceiling,
+)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -60,6 +70,7 @@ class SystematicOptimizer:
         self.noise_ceiling = None
         self.current_best_r2 = 0.0
         self.final_pipeline = None
+        self.winning_model_type = None
         
         # Setup logging and directories
         self.model_dir = Path(CONFIG["PATHS"]["MODEL_DIR_TEMPLATE"].format(dataset_num=dataset_num))
@@ -73,11 +84,14 @@ class SystematicOptimizer:
         
         # Phase 1: Data preparation and noise ceiling
         self.phase_1_data_preparation(X, y)
-        
-        # Phase 2: Model optimization
+
+        # Phase 2: Quick model family tournament
+        self.phase_2_model_family_tournament()
+
+        # Phase 3: Model optimization
         best_r2, best_params = self.phase_2_optimization()
         
-        # Phase 3: Final evaluation
+        # Phase 4: Final evaluation
         results = self.phase_3_final_evaluation()
         
         elapsed = time.time() - start_time
@@ -115,17 +129,45 @@ class SystematicOptimizer:
         print(f"✅ Data prepared: {self.X_train.shape}")
         
         # Estimate noise ceiling
-        ridge = Ridge(alpha=1.0, random_state=42)
-        scores = cross_val_score(ridge, self.X_train, self.y_train, cv=self.cv, scoring='r2')
-        self.noise_ceiling = scores.mean() + 2 * scores.std()
-        self.current_best_r2 = scores.mean()
+        self.noise_ceiling, self.current_best_r2 = estimate_noise_ceiling(
+            self.X_train,
+            self.y_train,
+            self.cv,
+        )
         
         print(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
         print(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
+
+    def phase_2_model_family_tournament(self):
+        """Quick tournament to select the best model family."""
+        print(f"\n{Colors.BOLD}⚔️ Phase 2: Model Family Tournament{Colors.END}")
+
+        candidates = {
+            'ridge': Ridge(alpha=1.0, random_state=42),
+            'elastic': ElasticNet(alpha=1.0, l1_ratio=0.5, random_state=42, max_iter=2000),
+            'gbr': GradientBoostingRegressor(random_state=42),
+            'rf': RandomForestRegressor(random_state=42, n_estimators=100, n_jobs=-1),
+        }
+
+        best_score = -np.inf
+        best_type = None
+        for name, model in candidates.items():
+            score = cross_val_score(model, self.X_train, self.y_train, cv=self.cv, scoring='r2').mean()
+            if score > best_score:
+                best_score = score
+                best_type = name
+
+        self.winning_model_type = best_type
+        print(f"🏆 Winning model family: {best_type} (R²={best_score:.4f})")
     
     def create_model(self, trial):
         """Create model based on trial parameters."""
-        model_type = trial.suggest_categorical('model_type', ['ridge', 'elastic', 'gbr', 'rf'])
+        if self.winning_model_type is None:
+            model_type = trial.suggest_categorical(
+                'model_type', ['ridge', 'elastic', 'gbr', 'rf']
+            )
+        else:
+            model_type = self.winning_model_type
         
         if model_type == 'ridge':
             alpha = trial.suggest_float('alpha', 1e-3, 100, log=True)
@@ -166,8 +208,8 @@ class SystematicOptimizer:
         return scores.mean()
     
     def phase_2_optimization(self):
-        """Phase 2: Model optimization."""
-        print(f"\n{Colors.BOLD}🎯 Phase 2: Model Optimization{Colors.END}")
+        """Phase 3: Model optimization."""
+        print(f"\n{Colors.BOLD}🎯 Phase 3: Model Optimization{Colors.END}")
         
         study = optuna.create_study(
             direction='maximize',
@@ -199,7 +241,7 @@ class SystematicOptimizer:
     def _build_final_model(self, params):
         """Build final model from best parameters."""
         best_params = params.copy()
-        model_type = best_params.pop('model_type')
+        model_type = best_params.pop('model_type', self.winning_model_type)
         
         if model_type == 'ridge':
             return Ridge(random_state=42, **best_params)
@@ -211,8 +253,8 @@ class SystematicOptimizer:
             return RandomForestRegressor(random_state=42, n_jobs=-1, **best_params)
     
     def phase_3_final_evaluation(self):
-        """Phase 3: Final evaluation on test set."""
-        print(f"\n{Colors.BOLD}📊 Phase 3: Final Evaluation{Colors.END}")
+        """Phase 4: Final evaluation on test set."""
+        print(f"\n{Colors.BOLD}📊 Phase 4: Final Evaluation{Colors.END}")
         
         y_pred = self.final_pipeline.predict(self.X_test)
         
@@ -267,4 +309,18 @@ class BattleTestedOptimizer:
     def run_optimization(self, X, y):
         """Run the battle-tested optimization pipeline."""
         optimizer = SystematicOptimizer(self.dataset_num, max_hyperopt_trials=self.max_trials)
-        return optimizer.run_systematic_optimization(X, y) 
+        return optimizer.run_systematic_optimization(X, y)
+
+    @staticmethod
+    def create_target_transformer(self, trial):
+        """Return transformer for target variable based on trial suggestion."""
+        transform = trial.suggest_categorical("y_transform", ["none", "log1p", "power"])
+        if transform == "log1p":
+            from sklearn.preprocessing import FunctionTransformer
+
+            return FunctionTransformer(np.log1p, inverse_func=np.expm1, validate=True)
+        if transform == "power":
+            from sklearn.preprocessing import PowerTransformer
+
+            return PowerTransformer()
+        return None

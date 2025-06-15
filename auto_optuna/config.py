@@ -109,16 +109,23 @@ DATASET_FILES = {
     1: {
         "predictors": "Predictors_Hold-1_2025-04-14_18-28.csv",
         "targets": "9_10_24_Hold_01_targets.csv",
-        "name": "Hold-1"
+        "name": "Hold-1",
     },
     2: {
-        "predictors": "hold2_predictor.csv", 
+        "predictors": "hold2_predictor.csv",
         "targets": "hold2_target.csv",
-        "name": "Hold-2"
+        "name": "Hold-2",
     },
     3: {
         "predictors": "predictors_Hold 1 Full_20250527_151252.csv",
-        "targets": "targets_Hold 1 Full_20250527_151252.csv", 
-        "name": "Hold-1 Full"
-    }
-} 
+        "targets": "targets_Hold 1 Full_20250527_151252.csv",
+        "name": "Hold-1 Full",
+    },
+}
+
+
+def get_dataset_info(dataset_num: int) -> dict:
+    """Return mapping of dataset file paths and name."""
+    if dataset_num not in DATASET_FILES:
+        raise ValueError(f"Invalid dataset number: {dataset_num}")
+    return DATASET_FILES[dataset_num]
