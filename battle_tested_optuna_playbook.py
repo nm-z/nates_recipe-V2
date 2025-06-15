@@ -95,6 +95,50 @@ class KMeansOutlierTransformer(BaseEstimator, TransformerMixin):
     def get_support_mask(self):
         return self.mask_
 
+
+class KMeansOutlierCV(BaseEstimator, TransformerMixin):
+    """Remove outliers via K-means using cross-validation"""
+
+    def __init__(self, n_clusters=3, min_cluster_size_ratio=0.1, cv=None):
+        self.n_clusters = n_clusters
+        self.min_cluster_size_ratio = min_cluster_size_ratio
+        self.cv = cv or RepeatedKFold(n_splits=5, n_repeats=1, random_state=42)
+        self.kmeans = None
+        self.mask_ = None
+        self.valid_clusters_ = None
+
+    def fit(self, X, y=None):
+        del y
+        n_samples = len(X)
+        self.mask_ = np.zeros(n_samples, dtype=bool)
+
+        for train_idx, val_idx in self.cv.split(X):
+            km = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
+            labels = km.fit_predict(X[train_idx])
+            counts = np.bincount(labels)
+            min_size = int(len(train_idx) * self.min_cluster_size_ratio)
+            valid = np.where(counts >= min_size)[0]
+            val_labels = km.predict(X[val_idx])
+            self.mask_[val_idx] = np.isin(val_labels, valid)
+
+        self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
+        final_labels = self.kmeans.fit_predict(X)
+        counts = np.bincount(final_labels)
+        min_size = int(n_samples * self.min_cluster_size_ratio)
+        self.valid_clusters_ = np.where(counts >= min_size)[0]
+        return self
+
+    def transform(self, X):
+        if self.mask_ is not None and len(self.mask_) == len(X):
+            mask = self.mask_
+        else:
+            labels = self.kmeans.predict(X)
+            mask = np.isin(labels, self.valid_clusters_)
+        return X[mask]
+
+    def get_support_mask(self):
+        return self.mask_
+
 class IsolationForestTransformer(BaseEstimator, TransformerMixin):
     """Remove outliers via Isolation Forest"""
     def __init__(self, contamination=0.1, n_estimators=100, random_state=42):
@@ -128,11 +172,14 @@ class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
         self.mask_ = None
     def fit(self, X, y=None):
         del y
-        self.lof = LocalOutlierFactor(n_neighbors=min(self.n_neighbors, len(X)-1),
-                                      contamination=self.contamination,
-                                      novelty=True,
-                                      n_jobs=-1)
-        labels = self.lof.fit_predict(X)
+        self.lof = LocalOutlierFactor(
+            n_neighbors=min(self.n_neighbors, len(X) - 1),
+            contamination=self.contamination,
+            novelty=True,
+            n_jobs=-1,
+        )
+        self.lof.fit(X)
+        labels = self.lof.predict(X)
         self.mask_ = labels != -1
         return self
     def transform(self, X):
@@ -245,9 +292,7 @@ class BattleTestedOptimizer:
                 
         except Exception as e:
             self.logger.error(f"Noise ceiling estimation failed: {e}")
-            self.noise_ceiling = 0.95  # Default fallback
-            self.baseline_r2 = 0.0
-            # retain std_score from any partial computation or default 0.0
+            raise ValueError("invalid data types or insufficient samples") from e
         
         self.logger.info(f"Baseline Ridge R²: {self.baseline_r2:.4f} ± {std_score:.4f}")
         self.logger.info(f"Noise ceiling (mean + 2·std): {self.noise_ceiling:.4f}")
@@ -279,7 +324,10 @@ class BattleTestedOptimizer:
         
         # Apply to training data
         initial_features = self.X.shape[1]
-        self.X_clean = self.preprocessing_pipeline.fit_transform(self.X)
+        try:
+            self.X_clean = self.preprocessing_pipeline.fit_transform(self.X)
+        except Exception as e:
+            raise ValueError("insufficient samples for preprocessing") from e
         
         # Apply to test data
         self.X_test_clean = self.preprocessing_pipeline.transform(self.X_test)
@@ -321,7 +369,7 @@ class BattleTestedOptimizer:
         self.logger.info(f"Features after: {self.X_clean.shape[1]}")
         self.logger.info(f"Removed: {removed_features} zero-variance features")
         
-        return self.X_clean, self.X_test_clean
+        return self.X_clean.shape[1]
 
     def make_model(self, trial):
         """Create model based on type and Optuna trial suggestions - exact recipe"""
@@ -501,13 +549,13 @@ class BattleTestedOptimizer:
         model_path = self.model_dir / f"hold{self.dataset_num}_best_model.pkl"
         joblib.dump(self.best_pipeline, model_path)
         self.logger.info(f"Best model saved to: {model_path}")
-        
-        # Also save preprocessing pipeline separately
-        preprocessing_path = self.model_dir / f"hold{self.dataset_num}_preprocessing_pipeline.pkl"
-        joblib.dump(self.preprocessing_pipeline, preprocessing_path)
-        self.logger.info(f"Preprocessing pipeline saved to: {preprocessing_path}")
-        
-        return self.best_pipeline
+
+
+        # Evaluate on held-out test set
+        y_pred = self.best_pipeline.predict(self.X_test_clean)
+        final_r2 = r2_score(self.y_test, y_pred)
+
+        return final_r2, self.study.best_params
 
     def step_5_final_evaluation(self):
         """Step 5: Final evaluation on held-out test set"""

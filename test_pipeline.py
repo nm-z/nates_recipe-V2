@@ -18,7 +18,13 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import the modules to test
-from battle_tested_optuna_playbook import BattleTestedOptimizer, KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
+from battle_tested_optuna_playbook import (
+    BattleTestedOptimizer,
+    KMeansOutlierTransformer,
+    KMeansOutlierCV,
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+)
 
 # Test fixtures
 @pytest.fixture
@@ -84,6 +90,16 @@ class TestOutlierTransformers:
         assert X_transformed.shape[1] == X.shape[1]  # Features unchanged
         assert hasattr(transformer, 'mask_')
         assert hasattr(transformer, 'valid_clusters_')
+
+    def test_kmeans_outlier_cv(self, sample_data):
+        X, _ = sample_data
+        transformer = KMeansOutlierCV(n_clusters=3)
+
+        X_transformed = transformer.fit_transform(X)
+
+        assert X_transformed.shape[0] <= X.shape[0]
+        assert X_transformed.shape[1] == X.shape[1]
+        assert hasattr(transformer, 'mask_')
     
     def test_isolation_forest_transformer(self, sample_data):
         X, _ = sample_data

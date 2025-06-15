@@ -65,9 +65,9 @@ def check_user_interaction():
         try:
             content = py_file.read_text()
             
-            # Check for input() statements
-            if "input(" in content:
-                violations.append(f"❌ {py_file.name}: contains input() statement")
+            # Check for input statements without embedding the exact string
+            if "input" + "(" in content:
+                violations.append(f"❌ {py_file.name}: contains input statement")
             
             # Check for environment variable configuration
             env_patterns = [
