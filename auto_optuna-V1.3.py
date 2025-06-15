@@ -216,24 +216,19 @@ class SystematicOptimizerV13(auto_optuna_v1_2.SystematicOptimizer):
 # 6️⃣  Minimal runnable entry-point mirroring v1.2 main()
 # -----------------------------------------------------------------------------
 
-DATASET = 3  # 1 = Hold-1, 2 = Hold-2, 3 = Hold-3 (default)
+from auto_optuna.config import CONFIG
+
+DATASET = CONFIG["DATASET"]["DEFAULT"]  # 1 = Hold-1, 2 = Hold-2, 3 = Hold-3
 
 import pandas as pd
 import numpy as np
+from auto_optuna.config import get_dataset_info
 
 def _load_dataset(dataset_id: int):
-    """Utility replicating dataset loader from v1.2."""
-    if dataset_id == 1:
-        X = pd.read_csv('Predictors_Hold-1_2025-04-14_18-28.csv', header=None).values.astype(np.float32)
-        y = pd.read_csv('9_10_24_Hold_01_targets.csv', header=None).values.astype(np.float32).ravel()
-    elif dataset_id == 2:
-        X = pd.read_csv('hold2_predictor.csv', header=None).values.astype(np.float32)
-        y = pd.read_csv('hold2_target.csv', header=None).values.astype(np.float32).ravel()
-    elif dataset_id == 3:
-        X = pd.read_csv('predictors_Hold 1 Full_20250527_151252.csv', header=None).values.astype(np.float32)
-        y = pd.read_csv('targets_Hold 1 Full_20250527_151252.csv', header=None).values.astype(np.float32).ravel()
-    else:
-        raise ValueError(f"Invalid DATASET value: {dataset_id} (must be 1, 2 or 3)")
+    """Load dataset using central configuration."""
+    info = get_dataset_info(dataset_id)
+    X = pd.read_csv(info["predictors"], header=None).values.astype(np.float32)
+    y = pd.read_csv(info["targets"], header=None).values.astype(np.float32).ravel()
     return X, y
 
 

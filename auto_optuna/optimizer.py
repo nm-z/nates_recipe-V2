@@ -33,8 +33,21 @@ import optuna
 from optuna.pruners import MedianPruner
 
 from .config import CONFIG, Colors
-from .transformers import KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
-from .utils import setup_logging, save_model_artifacts, create_diagnostic_plots, print_results_summary
+from .transformers import (
+    KMeansOutlierTransformer,
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+)
+from .utils import (
+    setup_logging,
+    save_model_artifacts,
+    create_diagnostic_plots,
+    print_results_summary,
+    estimate_noise_ceiling,
+    console,
+    Tree,
+    HAS_RICH,
+)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -60,12 +73,17 @@ class SystematicOptimizer:
         self.noise_ceiling = None
         self.current_best_r2 = 0.0
         self.final_pipeline = None
+        self.winning_model_type = None
         
         # Setup logging and directories
         self.model_dir = Path(CONFIG["PATHS"]["MODEL_DIR_TEMPLATE"].format(dataset_num=dataset_num))
         self.logger = setup_logging(dataset_num, self.model_dir)
         
-        print(f"{Colors.BOLD}{Colors.CYAN}🚀 SystematicOptimizer initialized for Hold-{dataset_num}{Colors.END}")
+        if HAS_RICH:
+            init_tree = Tree(f"🚀 SystematicOptimizer initialized for Hold-{dataset_num}")
+            console.print(init_tree)
+        else:
+            print(f"{Colors.BOLD}{Colors.CYAN}🚀 SystematicOptimizer initialized for Hold-{dataset_num}{Colors.END}")
     
     def run_systematic_optimization(self, X, y):
         """Main optimization pipeline."""
@@ -73,11 +91,14 @@ class SystematicOptimizer:
         
         # Phase 1: Data preparation and noise ceiling
         self.phase_1_data_preparation(X, y)
-        
-        # Phase 2: Model optimization
+
+        # Phase 2: Quick model family tournament
+        self.phase_2_model_family_tournament()
+
+        # Phase 3: Model optimization
         best_r2, best_params = self.phase_2_optimization()
         
-        # Phase 3: Final evaluation
+        # Phase 4: Final evaluation
         results = self.phase_3_final_evaluation()
         
         elapsed = time.time() - start_time
@@ -89,7 +110,10 @@ class SystematicOptimizer:
     
     def phase_1_data_preparation(self, X, y):
         """Phase 1: Data preparation and noise ceiling estimation."""
-        print(f"\n{Colors.BOLD}📊 Phase 1: Data Preparation{Colors.END}")
+        if HAS_RICH:
+            phase_tree = Tree("📊 Phase 1: Data Preparation")
+        else:
+            print(f"\n{Colors.BOLD}📊 Phase 1: Data Preparation{Colors.END}")
         
         # Split data
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -112,20 +136,63 @@ class SystematicOptimizer:
             'scaler': scaler
         }
         
-        print(f"✅ Data prepared: {self.X_train.shape}")
+        if HAS_RICH:
+            phase_tree.add(f"✅ Data prepared: {self.X_train.shape}")
+        else:
+            print(f"✅ Data prepared: {self.X_train.shape}")
         
         # Estimate noise ceiling
-        ridge = Ridge(alpha=1.0, random_state=42)
-        scores = cross_val_score(ridge, self.X_train, self.y_train, cv=self.cv, scoring='r2')
-        self.noise_ceiling = scores.mean() + 2 * scores.std()
-        self.current_best_r2 = scores.mean()
+        self.noise_ceiling, self.current_best_r2 = estimate_noise_ceiling(
+            self.X_train,
+            self.y_train,
+            self.cv,
+        )
         
-        print(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
-        print(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
+        if HAS_RICH:
+            phase_tree.add(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
+            phase_tree.add(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
+            console.print(phase_tree)
+        else:
+            print(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
+            print(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
+
+    def phase_2_model_family_tournament(self):
+        """Quick tournament to select the best model family."""
+        if HAS_RICH:
+            phase_tree = Tree("⚔️ Phase 2: Model Family Tournament")
+        else:
+            print(f"\n{Colors.BOLD}⚔️ Phase 2: Model Family Tournament{Colors.END}")
+
+        candidates = {
+            'ridge': Ridge(alpha=1.0, random_state=42),
+            'elastic': ElasticNet(alpha=1.0, l1_ratio=0.5, random_state=42, max_iter=2000),
+            'gbr': GradientBoostingRegressor(random_state=42),
+            'rf': RandomForestRegressor(random_state=42, n_estimators=100, n_jobs=-1),
+        }
+
+        best_score = -np.inf
+        best_type = None
+        for name, model in candidates.items():
+            score = cross_val_score(model, self.X_train, self.y_train, cv=self.cv, scoring='r2').mean()
+            if score > best_score:
+                best_score = score
+                best_type = name
+
+        self.winning_model_type = best_type
+        if HAS_RICH:
+            phase_tree.add(f"🏆 Winning model family: {best_type} (R²={best_score:.4f})")
+            console.print(phase_tree)
+        else:
+            print(f"🏆 Winning model family: {best_type} (R²={best_score:.4f})")
     
     def create_model(self, trial):
         """Create model based on trial parameters."""
-        model_type = trial.suggest_categorical('model_type', ['ridge', 'elastic', 'gbr', 'rf'])
+        if self.winning_model_type is None:
+            model_type = trial.suggest_categorical(
+                'model_type', ['ridge', 'elastic', 'gbr', 'rf']
+            )
+        else:
+            model_type = self.winning_model_type
         
         if model_type == 'ridge':
             alpha = trial.suggest_float('alpha', 1e-3, 100, log=True)
@@ -166,8 +233,11 @@ class SystematicOptimizer:
         return scores.mean()
     
     def phase_2_optimization(self):
-        """Phase 2: Model optimization."""
-        print(f"\n{Colors.BOLD}🎯 Phase 2: Model Optimization{Colors.END}")
+        """Phase 3: Model optimization."""
+        if HAS_RICH:
+            phase_tree = Tree("🎯 Phase 3: Model Optimization")
+        else:
+            print(f"\n{Colors.BOLD}🎯 Phase 3: Model Optimization{Colors.END}")
         
         study = optuna.create_study(
             direction='maximize',
@@ -176,9 +246,14 @@ class SystematicOptimizer:
         )
         
         study.optimize(self.objective, n_trials=self.max_hyperopt_trials, show_progress_bar=True)
-        
-        print(f"🏆 Best R²: {study.best_value:.4f}")
-        print(f"🔧 Best params: {study.best_params}")
+
+        if HAS_RICH:
+            phase_tree.add(f"🏆 Best R²: {study.best_value:.4f}")
+            phase_tree.add(f"🔧 Best params: {study.best_params}")
+            console.print(phase_tree)
+        else:
+            print(f"🏆 Best R²: {study.best_value:.4f}")
+            print(f"🔧 Best params: {study.best_params}")
         
         # Build final model
         self.final_pipeline = self._build_final_model(study.best_params)
@@ -199,7 +274,7 @@ class SystematicOptimizer:
     def _build_final_model(self, params):
         """Build final model from best parameters."""
         best_params = params.copy()
-        model_type = best_params.pop('model_type')
+        model_type = best_params.pop('model_type', self.winning_model_type)
         
         if model_type == 'ridge':
             return Ridge(random_state=42, **best_params)
@@ -211,8 +286,11 @@ class SystematicOptimizer:
             return RandomForestRegressor(random_state=42, n_jobs=-1, **best_params)
     
     def phase_3_final_evaluation(self):
-        """Phase 3: Final evaluation on test set."""
-        print(f"\n{Colors.BOLD}📊 Phase 3: Final Evaluation{Colors.END}")
+        """Phase 4: Final evaluation on test set."""
+        if HAS_RICH:
+            phase_tree = Tree("📊 Phase 4: Final Evaluation")
+        else:
+            print(f"\n{Colors.BOLD}📊 Phase 4: Final Evaluation{Colors.END}")
         
         y_pred = self.final_pipeline.predict(self.X_test)
         
@@ -246,7 +324,17 @@ class SystematicOptimizer:
             results=results,
             model_dir=self.model_dir
         )
-        
+
+        if HAS_RICH:
+            phase_tree.add(f"Test R²: {r2:.4f}")
+            phase_tree.add(f"Test MAE: {mae:.4f}")
+            phase_tree.add(f"Test RMSE: {rmse:.4f}")
+            console.print(phase_tree)
+        else:
+            print(f"Test R²: {r2:.4f}")
+            print(f"Test MAE: {mae:.4f}")
+            print(f"Test RMSE: {rmse:.4f}")
+
         return results
 
 
@@ -259,12 +347,33 @@ class BattleTestedOptimizer:
         self.target_r2 = target_r2
         self.max_trials = max_trials
         
-        print(f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}")
-        print(f"   Target R²: {target_r2}")
-        print(f"   Max trials: {max_trials}")
-        print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
+        if HAS_RICH:
+            tree = Tree(f"🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}")
+            tree.add(f"Target R²: {target_r2}")
+            tree.add(f"Max trials: {max_trials}")
+            tree.add(f"CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
+            console.print(tree)
+        else:
+            print(f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}")
+            print(f"   Target R²: {target_r2}")
+            print(f"   Max trials: {max_trials}")
+            print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
     
     def run_optimization(self, X, y):
         """Run the battle-tested optimization pipeline."""
         optimizer = SystematicOptimizer(self.dataset_num, max_hyperopt_trials=self.max_trials)
-        return optimizer.run_systematic_optimization(X, y) 
+        return optimizer.run_systematic_optimization(X, y)
+
+    @staticmethod
+    def create_target_transformer(self, trial):
+        """Return transformer for target variable based on trial suggestion."""
+        transform = trial.suggest_categorical("y_transform", ["none", "log1p", "power"])
+        if transform == "log1p":
+            from sklearn.preprocessing import FunctionTransformer
+
+            return FunctionTransformer(np.log1p, inverse_func=np.expm1, validate=True)
+        if transform == "power":
+            from sklearn.preprocessing import PowerTransformer
+
+            return PowerTransformer()
+        return None
