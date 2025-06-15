@@ -41,6 +41,18 @@ def load_dataset(dataset_id: int):
         raise
 
 
+def estimate_noise_ceiling(X, y, cv):
+    """Estimate noise ceiling and baseline R² using Ridge."""
+    from sklearn.linear_model import Ridge
+    from sklearn.model_selection import cross_val_score
+
+    ridge = Ridge(alpha=1.0, random_state=42)
+    scores = cross_val_score(ridge, X, y, cv=cv, scoring="r2")
+    baseline = scores.mean()
+    ceiling = baseline + 2 * scores.std()
+    return ceiling, baseline
+
+
 def setup_logging(dataset_num: int, model_dir: Path = None):
     """
     Setup logging configuration.

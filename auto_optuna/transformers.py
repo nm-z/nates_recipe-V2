@@ -45,13 +45,15 @@ class KMeansOutlierTransformer(BaseEstimator, TransformerMixin):
 
 class IsolationForestTransformer(BaseEstimator, TransformerMixin):
     """Remove outliers via Isolation Forest"""
-    
-    def __init__(self, contamination=0.1, n_estimators=100, random_state=42):
+
+    def __init__(self, contamination=0.1, n_estimators=100, random_state=42, remove=True):
         self.contamination = contamination
         self.n_estimators = n_estimators
         self.random_state = random_state
+        self.remove = remove
         self.iforest = None
         self.mask_ = None
+        self.outlier_indices_ = None
     
     def fit(self, X, y=None):
         del y  # Not used
@@ -63,12 +65,13 @@ class IsolationForestTransformer(BaseEstimator, TransformerMixin):
         )
         labels = self.iforest.fit_predict(X)
         self.mask_ = labels != -1
+        self.outlier_indices_ = np.where(labels == -1)[0]
         return self
     
     def transform(self, X):
         labels = self.iforest.predict(X)
         mask = labels != -1
-        return X[mask]
+        return X[mask] if self.remove else X
     
     def get_support_mask(self):
         return self.mask_
@@ -76,12 +79,14 @@ class IsolationForestTransformer(BaseEstimator, TransformerMixin):
 
 class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
     """Remove outliers via Local Outlier Factor"""
-    
-    def __init__(self, n_neighbors=20, contamination=0.1):
+
+    def __init__(self, n_neighbors=20, contamination=0.1, remove=True):
         self.n_neighbors = n_neighbors
         self.contamination = contamination
+        self.remove = remove
         self.lof = None
         self.mask_ = None
+        self.outlier_indices_ = None
     
     def fit(self, X, y=None):
         del y  # Not used
@@ -93,10 +98,11 @@ class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
         )
         labels = self.lof.fit_predict(X)
         self.mask_ = labels != -1
+        self.outlier_indices_ = np.where(labels == -1)[0]
         return self
     
     def transform(self, X):
-        return X[self.mask_]
+        return X[self.mask_] if self.remove else X
     
     def get_support_mask(self):
         return self.mask_
