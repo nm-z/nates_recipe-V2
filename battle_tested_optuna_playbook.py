@@ -221,8 +221,11 @@ class BattleTestedOptimizer:
             ('ridge', RidgeCV(alphas=np.logspace(-3, 3, 20)))
         ])
         
+        std_score = 0.0
         try:
-            scores = cross_val_score(baseline_pipe, self.X, self.y, cv=self.cv, scoring='r2', n_jobs=12)
+            scores = cross_val_score(
+                baseline_pipe, self.X, self.y, cv=self.cv, scoring='r2', n_jobs=12
+            )
             scores = scores[np.isfinite(scores)]  # Remove any inf/nan values
             
             if len(scores) > 0:
@@ -234,11 +237,13 @@ class BattleTestedOptimizer:
             else:
                 self.noise_ceiling = 0.95  # Default reasonable ceiling
                 self.baseline_r2 = 0.0
+                # std_score remains 0.0
                 
         except Exception as e:
             self.logger.error(f"Noise ceiling estimation failed: {e}")
             self.noise_ceiling = 0.95  # Default fallback
             self.baseline_r2 = 0.0
+            # retain std_score from any partial computation or default 0.0
         
         self.logger.info(f"Baseline Ridge R²: {self.baseline_r2:.4f} ± {std_score:.4f}")
         self.logger.info(f"Noise ceiling (mean + 2·std): {self.noise_ceiling:.4f}")
