@@ -34,7 +34,15 @@ from optuna.pruners import MedianPruner
 
 from .config import CONFIG, Colors
 from .transformers import KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
-from .utils import setup_logging, save_model_artifacts, create_diagnostic_plots, print_results_summary
+from .utils import (
+    setup_logging,
+    save_model_artifacts,
+    create_diagnostic_plots,
+    print_results_summary,
+    console,
+    Tree,
+    HAS_RICH,
+)
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -65,7 +73,15 @@ class SystematicOptimizer:
         self.model_dir = Path(CONFIG["PATHS"]["MODEL_DIR_TEMPLATE"].format(dataset_num=dataset_num))
         self.logger = setup_logging(dataset_num, self.model_dir)
         
-        print(f"{Colors.BOLD}{Colors.CYAN}🚀 SystematicOptimizer initialized for Hold-{dataset_num}{Colors.END}")
+        if HAS_RICH:
+            init_tree = Tree(f"🚀 SystematicOptimizer initialized for Hold-{dataset_num}")
+            init_tree.add(f"Max trials: {self.max_hyperopt_trials}")
+            init_tree.add(f"CV strategy: {self.cv_splits}-fold × {self.cv_repeats} repeats")
+            console.print(init_tree)
+        else:
+            print(f"{Colors.BOLD}{Colors.CYAN}🚀 SystematicOptimizer initialized for Hold-{dataset_num}{Colors.END}")
+            print(f"   Max trials: {self.max_hyperopt_trials}")
+            print(f"   CV strategy: {self.cv_splits}-fold × {self.cv_repeats} repeats")
     
     def run_systematic_optimization(self, X, y):
         """Main optimization pipeline."""
@@ -89,7 +105,10 @@ class SystematicOptimizer:
     
     def phase_1_data_preparation(self, X, y):
         """Phase 1: Data preparation and noise ceiling estimation."""
-        print(f"\n{Colors.BOLD}📊 Phase 1: Data Preparation{Colors.END}")
+        if HAS_RICH:
+            phase_tree = Tree("📊 Phase 1: Data Preparation")
+        else:
+            print(f"\n{Colors.BOLD}📊 Phase 1: Data Preparation{Colors.END}")
         
         # Split data
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -112,7 +131,10 @@ class SystematicOptimizer:
             'scaler': scaler
         }
         
-        print(f"✅ Data prepared: {self.X_train.shape}")
+        if HAS_RICH:
+            phase_tree.add(f"✅ Data prepared: {self.X_train.shape}")
+        else:
+            print(f"✅ Data prepared: {self.X_train.shape}")
         
         # Estimate noise ceiling
         ridge = Ridge(alpha=1.0, random_state=42)
@@ -120,8 +142,13 @@ class SystematicOptimizer:
         self.noise_ceiling = scores.mean() + 2 * scores.std()
         self.current_best_r2 = scores.mean()
         
-        print(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
-        print(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
+        if HAS_RICH:
+            phase_tree.add(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
+            phase_tree.add(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
+            console.print(phase_tree)
+        else:
+            print(f"📏 Noise ceiling estimate: {self.noise_ceiling:.4f}")
+            print(f"🎯 Baseline R²: {self.current_best_r2:.4f}")
     
     def create_model(self, trial):
         """Create model based on trial parameters."""
@@ -167,7 +194,10 @@ class SystematicOptimizer:
     
     def phase_2_optimization(self):
         """Phase 2: Model optimization."""
-        print(f"\n{Colors.BOLD}🎯 Phase 2: Model Optimization{Colors.END}")
+        if HAS_RICH:
+            phase_tree = Tree("🎯 Phase 2: Model Optimization")
+        else:
+            print(f"\n{Colors.BOLD}🎯 Phase 2: Model Optimization{Colors.END}")
         
         study = optuna.create_study(
             direction='maximize',
@@ -175,10 +205,15 @@ class SystematicOptimizer:
             sampler=CONFIG["OPTUNA"]["SAMPLER"]
         )
         
-        study.optimize(self.objective, n_trials=self.max_hyperopt_trials, show_progress_bar=True)
+        study.optimize(self.objective, n_trials=self.max_hyperopt_trials, show_progress_bar=False)
         
-        print(f"🏆 Best R²: {study.best_value:.4f}")
-        print(f"🔧 Best params: {study.best_params}")
+        if HAS_RICH:
+            phase_tree.add(f"🏆 Best R²: {study.best_value:.4f}")
+            phase_tree.add(f"🔧 Best params: {study.best_params}")
+            console.print(phase_tree)
+        else:
+            print(f"🏆 Best R²: {study.best_value:.4f}")
+            print(f"🔧 Best params: {study.best_params}")
         
         # Build final model
         self.final_pipeline = self._build_final_model(study.best_params)
@@ -212,7 +247,10 @@ class SystematicOptimizer:
     
     def phase_3_final_evaluation(self):
         """Phase 3: Final evaluation on test set."""
-        print(f"\n{Colors.BOLD}📊 Phase 3: Final Evaluation{Colors.END}")
+        if HAS_RICH:
+            phase_tree = Tree("📊 Phase 3: Final Evaluation")
+        else:
+            print(f"\n{Colors.BOLD}📊 Phase 3: Final Evaluation{Colors.END}")
         
         y_pred = self.final_pipeline.predict(self.X_test)
         
@@ -225,7 +263,7 @@ class SystematicOptimizer:
             'test_mae': mae,
             'test_rmse': rmse,
             'noise_ceiling': self.noise_ceiling,
-            'cv_best_r2': self.current_best_r2
+            'cv_best_r2': self.current_best_r2,
         }
         
         # Create diagnostic plots
@@ -247,22 +285,39 @@ class SystematicOptimizer:
             model_dir=self.model_dir
         )
         
+        if HAS_RICH:
+            phase_tree.add(f"Test R²: {r2:.4f}")
+            phase_tree.add(f"Test MAE: {mae:.4f}")
+            phase_tree.add(f"Test RMSE: {rmse:.4f}")
+            console.print(phase_tree)
+        else:
+            print(f"Test R²: {r2:.4f}")
+            print(f"Test MAE: {mae:.4f}")
+            print(f"Test RMSE: {rmse:.4f}")
+
         return results
 
 
 class BattleTestedOptimizer:
     """Legacy battle-tested optimizer for compatibility."""
     
-    def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3, 
+    def __init__(self, dataset_num, target_r2=0.93, max_trials=40, cv_splits=5, cv_repeats=3,
                  use_iforest=False, use_lof=False):
         self.dataset_num = dataset_num
         self.target_r2 = target_r2
         self.max_trials = max_trials
         
-        print(f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}")
-        print(f"   Target R²: {target_r2}")
-        print(f"   Max trials: {max_trials}")
-        print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
+        if HAS_RICH:
+            tree = Tree(f"🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}")
+            tree.add(f"Target R²: {target_r2}")
+            tree.add(f"Max trials: {max_trials}")
+            tree.add(f"CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
+            console.print(tree)
+        else:
+            print(f"{Colors.BOLD}{Colors.CYAN}🚀 Battle-Tested ML Optimizer Initialized for Hold-{dataset_num}{Colors.END}")
+            print(f"   Target R²: {target_r2}")
+            print(f"   Max trials: {max_trials}")
+            print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
     
     def run_optimization(self, X, y):
         """Run the battle-tested optimization pipeline."""
