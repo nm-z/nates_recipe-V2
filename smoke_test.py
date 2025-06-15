@@ -16,10 +16,10 @@ def test_imports():
     print("[TEST] Testing imports...")
     
     try:
-        import battle_tested_optuna_playbook
-        print("  [OK] battle_tested_optuna_playbook")
-        
-        from battle_tested_optuna_playbook import BattleTestedOptimizer
+        import auto_optuna
+        print("  [OK] auto_optuna")
+
+        from auto_optuna import BattleTestedOptimizer
         print("  [OK] BattleTestedOptimizer")
         
         import optuna
@@ -48,7 +48,7 @@ def test_basic_functionality():
         y = np.random.randn(50).astype(np.float32)
         
         # Test outlier transformers
-        from battle_tested_optuna_playbook import KMeansOutlierTransformer
+        from auto_optuna import KMeansOutlierTransformer
         transformer = KMeansOutlierTransformer(n_clusters=2)
         X_transformed = transformer.fit_transform(X)
         print(f"  [OK] KMeansOutlierTransformer: {X.shape} -> {X_transformed.shape}")
@@ -58,10 +58,10 @@ def test_basic_functionality():
         import tempfile
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('battle_tested_optuna_playbook.Path') as mock_path:
+            with patch('auto_optuna.optimizer.Path') as mock_path:
                 mock_path.return_value = Path(temp_dir)
                 
-                from battle_tested_optuna_playbook import BattleTestedOptimizer
+                from auto_optuna import BattleTestedOptimizer
                 optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
                 print("  [OK] BattleTestedOptimizer initialization")
         
@@ -94,18 +94,14 @@ def test_configuration_principle():
     print("\n[TEST] Testing configuration principle...")
     
     try:
-        import battle_tested_optuna_playbook
-        
+        import auto_optuna
+
         # Check hardcoded dataset
-        if hasattr(battle_tested_optuna_playbook, 'DATASET'):
-            dataset_num = battle_tested_optuna_playbook.DATASET
-            if isinstance(dataset_num, int) and dataset_num in [1, 2, 3]:
-                print(f"  [OK] Hardcoded dataset number: {dataset_num}")
-            else:
-                print(f"  [FAIL] Invalid dataset number: {dataset_num}")
-                return False
+        dataset_num = auto_optuna.CONFIG["DATASET"]["DEFAULT"]
+        if isinstance(dataset_num, int) and dataset_num in [1, 2, 3]:
+            print(f"  [OK] Hardcoded dataset number: {dataset_num}")
         else:
-            print("  [FAIL] No hardcoded DATASET found")
+            print(f"  [FAIL] Invalid dataset number: {dataset_num}")
             return False
         
         # Check no config files required

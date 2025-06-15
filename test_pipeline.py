@@ -18,7 +18,12 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import the modules to test
-from battle_tested_optuna_playbook import BattleTestedOptimizer, KMeansOutlierTransformer, IsolationForestTransformer, LocalOutlierFactorTransformer
+from auto_optuna import (
+    BattleTestedOptimizer,
+    KMeansOutlierTransformer,
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+)
 
 # Test fixtures
 @pytest.fixture
@@ -109,7 +114,7 @@ class TestBattleTestedOptimizer:
     """Test the main optimizer class"""
     
     def test_optimizer_initialization(self, temp_model_dir):
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
             
@@ -122,7 +127,7 @@ class TestBattleTestedOptimizer:
     def test_noise_ceiling_calculation(self, sample_data, temp_model_dir):
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
             
@@ -140,7 +145,7 @@ class TestBattleTestedOptimizer:
     def test_preprocessing_pipeline(self, sample_data, temp_model_dir):
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
             optimizer.step_1_pin_down_ceiling(X, y)
@@ -166,7 +171,7 @@ class TestPipelineIntegration:
         """Test a minimal training run with very few trials"""
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=3, target_r2=0.5)
             
@@ -184,7 +189,7 @@ class TestPipelineIntegration:
         """Test that models are properly saved and can be loaded"""
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
             
@@ -266,7 +271,7 @@ class TestPerformance:
         """Test prediction speed is reasonable"""
         X, y = sample_data
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=2)
             
@@ -299,7 +304,7 @@ class TestErrorHandling:
         X = np.array([[1, 2], [3, 4]], dtype=np.float32)
         y = np.array([1, 2], dtype=np.float32)
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
             
@@ -317,7 +322,7 @@ class TestErrorHandling:
         X = np.array([["a", "b"], ["c", "d"]])  # String data
         y = np.array([1, 2], dtype=np.float32)
         
-        with patch('battle_tested_optuna_playbook.Path') as mock_path:
+        with patch('auto_optuna.optimizer.Path') as mock_path:
             mock_path.return_value = temp_model_dir
             optimizer = BattleTestedOptimizer(dataset_num=1, max_trials=1)
             
@@ -334,12 +339,13 @@ class TestConfiguration:
     def test_hardcoded_dataset_numbers(self):
         """Test that dataset numbers are properly hardcoded"""
         # Import the main modules
-        import battle_tested_optuna_playbook
-        
-        # Check that DATASET is hardcoded
-        assert hasattr(battle_tested_optuna_playbook, 'DATASET')
-        assert isinstance(battle_tested_optuna_playbook.DATASET, int)
-        assert battle_tested_optuna_playbook.DATASET in [1, 2, 3]
+        import auto_optuna
+
+        # Check that DATASET is hardcoded in the configuration
+        assert hasattr(auto_optuna, 'CONFIG')
+        dataset = auto_optuna.CONFIG["DATASET"]["DEFAULT"]
+        assert isinstance(dataset, int)
+        assert dataset in [1, 2, 3]
     
     def test_no_config_files_exist(self):
         """Test that no configuration files exist in the repository"""
@@ -421,10 +427,10 @@ class TestConfiguration:
         """Test that the CLI requires minimal input"""
         # The main scripts should run with no arguments
         # This is tested by checking that main() functions exist and are callable
-        import battle_tested_optuna_playbook
-        
-        assert hasattr(battle_tested_optuna_playbook, 'main')
-        assert callable(battle_tested_optuna_playbook.main)
+        from auto_optuna import main as auto_main
+
+        assert hasattr(auto_main, 'main')
+        assert callable(auto_main.main)
     
     def test_zero_configuration_principle(self):
         """Test the core principle: 2 CSVs in → Model out, nothing more"""
