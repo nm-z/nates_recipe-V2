@@ -20,10 +20,26 @@ from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 
 # Models
-from sklearn.linear_model import Ridge, RidgeCV, ElasticNet
+from sklearn.linear_model import Ridge, RidgeCV, ElasticNet, Lasso
 from sklearn.svm import SVR
-from sklearn.ensemble import GradientBoostingRegressor, BaggingRegressor, AdaBoostRegressor, RandomForestRegressor
+from sklearn.ensemble import (
+    GradientBoostingRegressor,
+    BaggingRegressor,
+    AdaBoostRegressor,
+    RandomForestRegressor,
+    ExtraTreesRegressor,
+)
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.neural_network import MLPRegressor
+
+try:  # Optional third-party regressors
+    from xgboost import XGBRegressor
+except Exception:  # pragma: no cover - optional
+    XGBRegressor = None
+try:
+    from lightgbm import LGBMRegressor
+except Exception:  # pragma: no cover - optional
+    LGBMRegressor = None
 
 # Metrics
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
@@ -148,7 +164,20 @@ class SystematicOptimizer:
     
     def create_model(self, trial):
         """Create model based on trial parameters."""
-        model_type = trial.suggest_categorical('model_type', ['ridge', 'elastic', 'gbr', 'rf'])
+        model_type = trial.suggest_categorical(
+            'model_type',
+            [
+                'ridge',
+                'elastic',
+                'lasso',
+                'dt',
+                'extra',
+                'gbr',
+                'rf',
+                'xgb',
+                'lgbm',
+            ],
+        )
         
         if model_type == 'ridge':
             alpha = trial.suggest_float('alpha', 1e-3, 100, log=True)
@@ -159,6 +188,29 @@ class SystematicOptimizer:
             l1_ratio = trial.suggest_float('l1_ratio', 0.1, 0.9)
             return ElasticNet(alpha=alpha, l1_ratio=l1_ratio, random_state=42, max_iter=2000)
         
+        elif model_type == 'lasso':
+            alpha = trial.suggest_float('alpha', 1e-3, 10, log=True)
+            return Lasso(alpha=alpha, random_state=42)
+
+        elif model_type == 'dt':
+            max_depth = trial.suggest_int('max_depth', 3, 20)
+            min_samples_split = trial.suggest_int('min_samples_split', 2, 10)
+            return DecisionTreeRegressor(
+                max_depth=max_depth,
+                min_samples_split=min_samples_split,
+                random_state=42,
+            )
+
+        elif model_type == 'extra':
+            n_estimators = trial.suggest_int('n_estimators', 50, 300)
+            max_depth = trial.suggest_int('max_depth', 3, 20)
+            return ExtraTreesRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=-1,
+            )
+
         elif model_type == 'gbr':
             n_estimators = trial.suggest_int('n_estimators', 50, 300)
             learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3)
@@ -180,6 +232,35 @@ class SystematicOptimizer:
                 min_samples_split=min_samples_split,
                 random_state=42,
                 n_jobs=-1
+            )
+
+        elif model_type == 'xgb':
+            if XGBRegressor is None:
+                raise optuna.TrialPruned()
+            n_estimators = trial.suggest_int('n_estimators', 50, 300)
+            learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3)
+            max_depth = trial.suggest_int('max_depth', 3, 10)
+            return XGBRegressor(
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=1,
+                verbosity=0,
+            )
+
+        elif model_type == 'lgbm':
+            if LGBMRegressor is None:
+                raise optuna.TrialPruned()
+            n_estimators = trial.suggest_int('n_estimators', 50, 300)
+            learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3)
+            max_depth = trial.suggest_int('max_depth', 3, 10)
+            return LGBMRegressor(
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=1,
             )
     
     def objective(self, trial):
@@ -236,10 +317,20 @@ class SystematicOptimizer:
             return Ridge(random_state=42, **best_params)
         elif model_type == 'elastic':
             return ElasticNet(random_state=42, max_iter=2000, **best_params)
+        elif model_type == 'lasso':
+            return Lasso(random_state=42, **best_params)
+        elif model_type == 'dt':
+            return DecisionTreeRegressor(random_state=42, **best_params)
+        elif model_type == 'extra':
+            return ExtraTreesRegressor(random_state=42, n_jobs=-1, **best_params)
         elif model_type == 'gbr':
             return GradientBoostingRegressor(random_state=42, **best_params)
         elif model_type == 'rf':
             return RandomForestRegressor(random_state=42, n_jobs=-1, **best_params)
+        elif model_type == 'xgb' and XGBRegressor is not None:
+            return XGBRegressor(random_state=42, n_jobs=1, verbosity=0, **best_params)
+        elif model_type == 'lgbm' and LGBMRegressor is not None:
+            return LGBMRegressor(random_state=42, n_jobs=1, **best_params)
     
     def phase_3_final_evaluation(self):
         """Phase 3: Final evaluation on test set."""
@@ -294,6 +385,77 @@ class SystematicOptimizer:
         return results
 
 
+class SystematicOptimizerV13(SystematicOptimizer):
+    """Refined optimizer using centralized CONFIG and optional throttling."""
+
+    def __init__(self, dataset_num: int, max_preprocessing_trials: int | None = None, max_hyperopt_trials: int | None = None):
+        if max_preprocessing_trials is None:
+            max_preprocessing_trials = CONFIG["OPTUNA"]["PREPROCESSING_TRIALS"]
+        if max_hyperopt_trials is None:
+            max_hyperopt_trials = CONFIG["OPTUNA"]["HYPEROPT_TRIALS"]
+        super().__init__(dataset_num, max_hyperopt_trials=max_hyperopt_trials)
+        self.max_preprocessing_trials = max_preprocessing_trials
+        self.last_refresh_time = 0.0
+
+    def _evaluate_trial_result(self, study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
+        """Report progress during optimization."""
+        from optuna.trial import TrialState
+        if trial.state != TrialState.COMPLETE:
+            return
+        improvement = study.best_value - self.current_best_r2
+        if improvement <= 1e-3:
+            return
+        ceiling_gap = abs(study.best_value - self.noise_ceiling) if self.noise_ceiling else float("inf")
+        if HAS_RICH:
+            msg = f"🔥 Trial {trial.number}: R²={trial.value:.4f} (+{improvement:.4f})"
+            tree = Tree(msg)
+            tree.add(f"Gap to ceiling: {ceiling_gap:.4f}")
+            console.print(tree)
+        else:
+            print(f"Trial {trial.number}: R²={trial.value:.4f} (+{improvement:.4f})")
+
+    def phase_2_optimization(self):
+        if HAS_RICH:
+            phase_tree = Tree("🎯 Phase 2: Model Optimization (v1.3)")
+        else:
+            print(f"\n{Colors.BOLD}🎯 Phase 2: Model Optimization (v1.3){Colors.END}")
+
+        study = optuna.create_study(
+            direction='maximize',
+            pruner=CONFIG["OPTUNA"]["PRUNER_HYPEROPT"],
+            sampler=CONFIG["OPTUNA"]["SAMPLER"],
+        )
+
+        study.optimize(
+            self.objective,
+            n_trials=self.max_hyperopt_trials,
+            callbacks=[self._evaluate_trial_result],
+            show_progress_bar=False,
+        )
+
+        if HAS_RICH:
+            phase_tree.add(f"🏆 Best R²: {study.best_value:.4f}")
+            phase_tree.add(f"🔧 Best params: {study.best_params}")
+            console.print(phase_tree)
+        else:
+            print(f"🏆 Best R²: {study.best_value:.4f}")
+            print(f"🔧 Best params: {study.best_params}")
+
+        self.final_pipeline = self._build_final_model(study.best_params)
+        self.final_pipeline.fit(self.X_train, self.y_train)
+
+        save_model_artifacts(
+            self.final_pipeline,
+            self.preprocessing_components,
+            self.dataset_num,
+            model_dir=self.model_dir,
+        )
+
+        self.current_best_r2 = study.best_value
+        self.study = study
+        return study.best_value, study.best_params
+
+
 class BattleTestedOptimizer:
     """Legacy battle-tested optimizer for compatibility."""
     
@@ -314,6 +476,17 @@ class BattleTestedOptimizer:
             print(f"   Target R²: {target_r2}")
             print(f"   Max trials: {max_trials}")
             print(f"   CV strategy: {cv_splits}-fold × {cv_repeats} repeats")
+
+    def create_target_transformer(self, trial):
+        """Create optional transformer for target values."""
+        transform = trial.suggest_categorical('y_transform', ['none', 'log1p', 'power'])
+        if transform == 'log1p':
+            from sklearn.preprocessing import FunctionTransformer
+            return FunctionTransformer(np.log1p, np.expm1, validate=False)
+        if transform == 'power':
+            from sklearn.preprocessing import PowerTransformer
+            return PowerTransformer()
+        return None
     
     def run_optimization(self, X, y):
         """Run the battle-tested optimization pipeline."""
