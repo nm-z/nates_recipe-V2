@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from config import CONFIG, Colors
-from utils import load_dataset, validate_dataset_files
+from utils import load_dataset, validate_dataset_files, DATASET_FILES
 from optimizer import SystematicOptimizer, BattleTestedOptimizer
 
 
