@@ -20,10 +20,26 @@ from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 
 # Models
-from sklearn.linear_model import Ridge, RidgeCV, ElasticNet
+from sklearn.linear_model import Ridge, RidgeCV, ElasticNet, Lasso
 from sklearn.svm import SVR
-from sklearn.ensemble import GradientBoostingRegressor, BaggingRegressor, AdaBoostRegressor, RandomForestRegressor
+from sklearn.ensemble import (
+    GradientBoostingRegressor,
+    BaggingRegressor,
+    AdaBoostRegressor,
+    RandomForestRegressor,
+    ExtraTreesRegressor,
+)
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.neural_network import MLPRegressor
+
+try:  # Optional third-party regressors
+    from xgboost import XGBRegressor
+except Exception:  # pragma: no cover - optional
+    XGBRegressor = None
+try:
+    from lightgbm import LGBMRegressor
+except Exception:  # pragma: no cover - optional
+    LGBMRegressor = None
 
 # Metrics
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
@@ -152,7 +168,20 @@ class SystematicOptimizer:
     
     def create_model(self, trial):
         """Create model based on trial parameters."""
-        model_type = trial.suggest_categorical('model_type', ['ridge', 'elastic', 'gbr', 'rf'])
+        model_type = trial.suggest_categorical(
+            'model_type',
+            [
+                'ridge',
+                'elastic',
+                'lasso',
+                'dt',
+                'extra',
+                'gbr',
+                'rf',
+                'xgb',
+                'lgbm',
+            ],
+        )
         
         if model_type == 'ridge':
             alpha = trial.suggest_float('alpha', 1e-3, 100, log=True)
@@ -162,6 +191,29 @@ class SystematicOptimizer:
             alpha = trial.suggest_float('alpha', 1e-3, 10, log=True)
             l1_ratio = trial.suggest_float('l1_ratio', 0.1, 0.9)
             return ElasticNet(alpha=alpha, l1_ratio=l1_ratio, random_state=42, max_iter=2000)
+
+        elif model_type == 'lasso':
+            alpha = trial.suggest_float('alpha', 1e-3, 10, log=True)
+            return Lasso(alpha=alpha, random_state=42)
+
+        elif model_type == 'dt':
+            max_depth = trial.suggest_int('max_depth', 3, 20)
+            min_samples_split = trial.suggest_int('min_samples_split', 2, 10)
+            return DecisionTreeRegressor(
+                max_depth=max_depth,
+                min_samples_split=min_samples_split,
+                random_state=42,
+            )
+
+        elif model_type == 'extra':
+            n_estimators = trial.suggest_int('n_estimators', 50, 300)
+            max_depth = trial.suggest_int('max_depth', 3, 20)
+            return ExtraTreesRegressor(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=-1,
+            )
         
         elif model_type == 'gbr':
             n_estimators = trial.suggest_int('n_estimators', 50, 300)
@@ -184,6 +236,35 @@ class SystematicOptimizer:
                 min_samples_split=min_samples_split,
                 random_state=42,
                 n_jobs=-1
+            )
+
+        elif model_type == 'xgb':
+            if XGBRegressor is None:
+                raise optuna.TrialPruned()
+            n_estimators = trial.suggest_int('n_estimators', 50, 300)
+            learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3)
+            max_depth = trial.suggest_int('max_depth', 3, 10)
+            return XGBRegressor(
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=1,
+                verbosity=0,
+            )
+
+        elif model_type == 'lgbm':
+            if LGBMRegressor is None:
+                raise optuna.TrialPruned()
+            n_estimators = trial.suggest_int('n_estimators', 50, 300)
+            learning_rate = trial.suggest_float('learning_rate', 0.01, 0.3)
+            max_depth = trial.suggest_int('max_depth', 3, 10)
+            return LGBMRegressor(
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                random_state=42,
+                n_jobs=1,
             )
     
     def objective(self, trial):
@@ -240,10 +321,20 @@ class SystematicOptimizer:
             return Ridge(random_state=42, **best_params)
         elif model_type == 'elastic':
             return ElasticNet(random_state=42, max_iter=2000, **best_params)
+        elif model_type == 'lasso':
+            return Lasso(random_state=42, **best_params)
+        elif model_type == 'dt':
+            return DecisionTreeRegressor(random_state=42, **best_params)
+        elif model_type == 'extra':
+            return ExtraTreesRegressor(random_state=42, n_jobs=-1, **best_params)
         elif model_type == 'gbr':
             return GradientBoostingRegressor(random_state=42, **best_params)
         elif model_type == 'rf':
             return RandomForestRegressor(random_state=42, n_jobs=-1, **best_params)
+        elif model_type == 'xgb' and XGBRegressor is not None:
+            return XGBRegressor(random_state=42, n_jobs=1, verbosity=0, **best_params)
+        elif model_type == 'lgbm' and LGBMRegressor is not None:
+            return LGBMRegressor(random_state=42, n_jobs=1, **best_params)
     
     def phase_3_final_evaluation(self):
         """Phase 3: Final evaluation on test set."""
