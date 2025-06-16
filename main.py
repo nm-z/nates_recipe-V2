@@ -8,8 +8,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from config import CONFIG, Colors
-from utils import load_dataset, validate_dataset_files, DATASET_FILES
+from config import CONFIG, Colors, DATASET_FILES
+from utils import load_dataset, validate_dataset_files
 from optimizer import SystematicOptimizer, BattleTestedOptimizer
 
 
@@ -28,18 +28,27 @@ def main():
     
     args = parser.parse_args()
     
-    # Validate dataset files exist
-    if not validate_dataset_files(args.dataset):
-        print(f"{Colors.RED}❌ Dataset {args.dataset} files not found!{Colors.END}")
-        print(f"Expected files: {DATASET_FILES[args.dataset]['predictors']}, {DATASET_FILES[args.dataset]['targets']}")
+    dataset_key = CONFIG["DATASET_ID_MAP"].get(args.dataset)
+    if dataset_key is None:
+        print(f"{Colors.RED}❌ Invalid dataset ID: {args.dataset}{Colors.END}")
+        sys.exit(1)
+
+    # Validate dataset availability / files
+    if not validate_dataset_files(dataset_key):
+        print(f"{Colors.RED}❌ Dataset '{dataset_key}' files not found!{Colors.END}")
+        info = DATASET_FILES.get(args.dataset, {})
+        if info.get('predictors') or info.get('targets'):
+            print(
+                f"Expected files: {info.get('predictors')} | {info.get('targets')}"
+            )
         sys.exit(1)
     
     # Load dataset
     print(f"{Colors.BOLD}{Colors.CYAN}🚀 Starting Auto Optuna Optimization{Colors.END}")
     print(f"Dataset: {DATASET_FILES[args.dataset]['name']}")
     print(f"Optimizer: {args.optimizer}")
-    
-    X, y = load_dataset(args.dataset)
+
+    X, y = load_dataset(dataset_key)
     
     # Initialize optimizer
     if args.optimizer == 'systematic':
