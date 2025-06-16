@@ -16,7 +16,11 @@ from sklearn.datasets import (
     load_diabetes,
     fetch_california_housing,
     load_wine,
-    load_breast_cancer
+    load_breast_cancer,
+    make_friedman1,
+    make_friedman2,
+    make_friedman3,
+    make_regression
 )
 
 try:  # Optional Rich integration
@@ -30,40 +34,80 @@ except Exception:  # pragma: no cover - Rich not installed
     console = None
     HAS_RICH = False
 
-def load_dataset(dataset_name: str):
+# Dataset configuration mapping
+DATASET_FILES = {
+    1: {
+        "name": "California Housing",
+        "loader": "fetch_california_housing",
+        "type": "regression",
+        "predictors": "california_housing_predictors",
+        "targets": "california_housing_targets"
+    },
+    2: {
+        "name": "Diabetes",
+        "loader": "load_diabetes", 
+        "type": "regression",
+        "predictors": "diabetes_predictors",
+        "targets": "diabetes_targets"
+    },
+    3: {
+        "name": "Friedman1 (Synthetic)",
+        "loader": "make_friedman1",
+        "type": "regression",
+        "predictors": "friedman1_predictors",
+        "targets": "friedman1_targets"
+    }
+}
+
+def load_dataset(dataset_id: int):
     """
-    Load scikit-learn built-in dataset.
+    Load built-in scikit-learn dataset based on ID.
     
     Args:
-        dataset_name: Name of the scikit-learn dataset (e.g., 'diabetes')
+        dataset_id: Dataset identifier (1=California Housing, 2=Diabetes, 3=Friedman1)
         
     Returns:
         tuple: (X, y) arrays
     """
-    if dataset_name not in CONFIG["SKLEARN_DATASETS"]:
-        raise ValueError(f"Invalid dataset name: {dataset_name}. Choose from {list(CONFIG['SKLEARN_DATASETS'].keys())}")
+    if dataset_id not in DATASET_FILES:
+        raise ValueError(f"Invalid dataset ID: {dataset_id}. Choose from {list(DATASET_FILES.keys())}")
     
-    dataset_info = CONFIG["SKLEARN_DATASETS"][dataset_name]
-    loader_func = globals()[dataset_info["loader"]] # Get the function by name
+    dataset_info = DATASET_FILES[dataset_id]
+    loader_name = dataset_info["loader"]
+    dataset_name = dataset_info["name"]
     
     try:
-        # Scikit-learn loaders typically return a Bunch object
-        data_bunch = loader_func()
-        X, y = data_bunch.data, data_bunch.target
+        if loader_name == "fetch_california_housing":
+            data = fetch_california_housing(as_frame=False)
+            X, y = data.data, data.target
+        elif loader_name == "load_diabetes":
+            data = load_diabetes(as_frame=False)
+            X, y = data.data, data.target
+        elif loader_name == "make_friedman1":
+            X, y = make_friedman1(n_samples=1000, n_features=10, noise=0.1, random_state=42)
+        elif loader_name == "make_friedman2":
+            X, y = make_friedman2(n_samples=1000, noise=0.1, random_state=42)
+        elif loader_name == "make_friedman3":
+            X, y = make_friedman3(n_samples=1000, noise=0.1, random_state=42)
+        else:
+            # Generic loader for other datasets
+            loader_func = globals()[loader_name]
+            data = loader_func()
+            X, y = data.data, data.target
         
         if HAS_RICH:
-            tree = Tree(f"✅ Loaded {dataset_info['name']} dataset")
+            tree = Tree(f"✅ Loaded {dataset_name} dataset")
             tree.add(f"Predictors: {X.shape}")
             tree.add(f"Targets: {len(y)} samples")
             console.print(tree)
         else:
             print(
-                f"{Colors.GREEN}✅ Loaded {dataset_info['name']} dataset: {X.shape} features, {len(y)} samples{Colors.END}"
+                f"{Colors.GREEN}✅ Loaded {dataset_name} dataset: {X.shape} features, {len(y)} samples{Colors.END}"
             )
-        return X.astype(np.float32), y.astype(np.float32).ravel() # Ensure consistent dtypes and ravel for y
+        return X.astype(np.float32), y.astype(np.float32).ravel()
         
     except Exception as e:
-        print(f"{Colors.RED}❌ Error loading scikit-learn dataset '{dataset_name}': {e}{Colors.END}")
+        print(f"{Colors.RED}❌ Error loading dataset '{dataset_name}': {e}{Colors.END}")
         raise
 
 
