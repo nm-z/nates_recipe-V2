@@ -13,9 +13,15 @@ Main Components:
 from .optimizer import SystematicOptimizer, BattleTestedOptimizer
 from .transformers import (
     KMeansOutlierTransformer,
-    IsolationForestTransformer, 
-    LocalOutlierFactorTransformer
+    IsolationForestTransformer,
+    LocalOutlierFactorTransformer,
+    OutlierFilterTransformer,
+    HSICFeatureSelector,
 )
+from sklearn.preprocessing import QuantileTransformer, PowerTransformer, MinMaxScaler
+from sklearn.feature_selection import RFECV
+from sklearn.decomposition import KernelPCA, TruncatedSVD
+from sklearn.compose import TransformedTargetRegressor
 from .config import CONFIG, Colors
 from .utils import load_dataset, setup_logging, console, HAS_RICH, Tree
 
@@ -26,6 +32,15 @@ __all__ = [
     "KMeansOutlierTransformer",
     "IsolationForestTransformer",
     "LocalOutlierFactorTransformer",
+    "OutlierFilterTransformer",
+    "HSICFeatureSelector",
+    "QuantileTransformer",
+    "PowerTransformer",
+    "MinMaxScaler",
+    "RFECV",
+    "KernelPCA",
+    "TruncatedSVD",
+    "TransformedTargetRegressor",
     "CONFIG",
     "Colors",
     "load_dataset",
