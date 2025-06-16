@@ -39,6 +39,15 @@ CONFIG = {
         "california_housing": {"loader": "fetch_california_housing", "type": "regression", "name": "California Housing"},
         "wine": {"loader": "load_wine", "type": "classification", "name": "Wine"},
         "breast_cancer": {"loader": "load_breast_cancer", "type": "classification", "name": "Breast Cancer Wisconsin"},
+        "diabetes_frame": {"loader": "load_diabetes", "type": "regression", "name": "Diabetes (as_frame=True)"},
+        "synthetic_regression": {"loader": "make_regression", "type": "regression", "name": "Synthetic Regression"},
+        "airfoil_self_noise": {"loader": "fetch_openml", "type": "regression", "name": "Airfoil Self Noise"},
+        "friedman1_small": {"loader": "make_friedman1", "type": "regression", "name": "Friedman1 Small"},
+        "friedman2": {"loader": "make_friedman2", "type": "regression", "name": "Friedman2"},
+        "friedman3": {"loader": "make_friedman3", "type": "regression", "name": "Friedman3"},
+        "california_housing_frame": {"loader": "fetch_california_housing", "type": "regression", "name": "California Housing (as_frame=True)"},
+        "energy_efficiency": {"loader": "fetch_openml", "type": "regression", "name": "Energy Efficiency"},
+        "openml_42092": {"loader": "fetch_openml", "type": "regression", "name": "OpenML Dataset 42092"},
     },
     
     # Optuna optimization parameters

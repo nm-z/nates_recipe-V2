@@ -9,6 +9,7 @@ import logging
 import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pandas as pd
 from pathlib import Path
 from config import CONFIG, Colors
 from sklearn.datasets import (
@@ -17,6 +18,7 @@ from sklearn.datasets import (
     fetch_california_housing,
     load_wine,
     load_breast_cancer,
+    fetch_openml,
     make_friedman1,
     make_friedman2,
     make_friedman3,
@@ -56,44 +58,125 @@ DATASET_FILES = {
         "type": "regression",
         "predictors": "friedman1_predictors",
         "targets": "friedman1_targets"
+    },
+    4: {
+        "name": "Diabetes (as_frame=True)",
+        "loader": "load_diabetes",
+        "loader_params": {"as_frame": True},
+        "type": "regression",
+        "predictors": "diabetes_frame_predictors",
+        "targets": "diabetes_frame_targets"
+    },
+    5: {
+        "name": "Synthetic Regression",
+        "loader": "make_regression",
+        "loader_params": {
+            "n_samples": 500,
+            "n_features": 60,
+            "n_informative": 6,
+            "noise": 0.15,
+            "effective_rank": 10,
+            "random_state": 1
+        },
+        "type": "regression",
+        "predictors": "regression_predictors",
+        "targets": "regression_targets"
+    },
+    6: {
+        "name": "Airfoil Self Noise",
+        "loader": "fetch_openml",
+        "loader_params": {"name": "airfoil_self_noise", "as_frame": True},
+        "type": "regression",
+        "predictors": "airfoil_predictors",
+        "targets": "airfoil_targets"
+    },
+    7: {
+        "name": "Friedman1 Small",
+        "loader": "make_friedman1",
+        "loader_params": {"n_samples": 300, "noise": 0.0, "random_state": 0},
+        "type": "regression",
+        "predictors": "friedman1_small_predictors",
+        "targets": "friedman1_small_targets"
+    },
+    8: {
+        "name": "Friedman2",
+        "loader": "make_friedman2",
+        "loader_params": {"n_samples": 600, "random_state": 1},
+        "type": "regression",
+        "predictors": "friedman2_predictors",
+        "targets": "friedman2_targets"
+    },
+    9: {
+        "name": "Friedman3",
+        "loader": "make_friedman3",
+        "loader_params": {"n_samples": 600, "random_state": 2},
+        "type": "regression",
+        "predictors": "friedman3_predictors",
+        "targets": "friedman3_targets"
+    },
+    10: {
+        "name": "California Housing (as_frame=True)",
+        "loader": "fetch_california_housing",
+        "loader_params": {"as_frame": True},
+        "type": "regression",
+        "predictors": "california_housing_frame_predictors",
+        "targets": "california_housing_frame_targets"
+    },
+    11: {
+        "name": "Energy Efficiency",
+        "loader": "fetch_openml",
+        "loader_params": {"name": "energy_efficiency", "version": 2, "as_frame": True},
+        "type": "regression",
+        "predictors": "energy_efficiency_predictors",
+        "targets": "energy_efficiency_targets"
+    },
+    12: {
+        "name": "OpenML Dataset 42092",
+        "loader": "fetch_openml",
+        "loader_params": {"data_id": 42092, "as_frame": True},
+        "type": "regression",
+        "predictors": "openml_42092_predictors",
+        "targets": "openml_42092_targets"
     }
 }
 
 def load_dataset(dataset_id: int):
     """
-    Load built-in scikit-learn dataset based on ID.
-    
+    Load a dataset by its numeric identifier.
+
     Args:
-        dataset_id: Dataset identifier (1=California Housing, 2=Diabetes, 3=Friedman1)
-        
+        dataset_id: Identifier key from ``DATASET_FILES``.
+
     Returns:
-        tuple: (X, y) arrays
+        tuple: ``(X, y)`` arrays
     """
     if dataset_id not in DATASET_FILES:
-        raise ValueError(f"Invalid dataset ID: {dataset_id}. Choose from {list(DATASET_FILES.keys())}")
-    
+        raise ValueError(
+            f"Invalid dataset ID: {dataset_id}. Choose from {list(DATASET_FILES.keys())}"
+        )
+
     dataset_info = DATASET_FILES[dataset_id]
     loader_name = dataset_info["loader"]
     dataset_name = dataset_info["name"]
-    
+    params = dataset_info.get("loader_params", {})
+
     try:
-        if loader_name == "fetch_california_housing":
-            data = fetch_california_housing(as_frame=False)
-            X, y = data.data, data.target
-        elif loader_name == "load_diabetes":
-            data = load_diabetes(as_frame=False)
-            X, y = data.data, data.target
-        elif loader_name == "make_friedman1":
-            X, y = make_friedman1(n_samples=1000, n_features=10, noise=0.1, random_state=42)
-        elif loader_name == "make_friedman2":
-            X, y = make_friedman2(n_samples=1000, noise=0.1, random_state=42)
-        elif loader_name == "make_friedman3":
-            X, y = make_friedman3(n_samples=1000, noise=0.1, random_state=42)
+        loader_func = globals()[loader_name]
+        data = loader_func(**params)
+
+        if isinstance(data, tuple):
+            X, y = data
         else:
-            # Generic loader for other datasets
-            loader_func = globals()[loader_name]
-            data = loader_func()
             X, y = data.data, data.target
+
+        # Ensure numeric matrix
+        if hasattr(X, "select_dtypes"):
+            X = X.select_dtypes(include="number")
+        if hasattr(y, "astype"):
+            try:
+                y = pd.to_numeric(y)
+            except Exception:
+                pass
         
         if HAS_RICH:
             tree = Tree(f"✅ Loaded {dataset_name} dataset")

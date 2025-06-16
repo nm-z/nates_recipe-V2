@@ -16,8 +16,13 @@ from optimizer import SystematicOptimizer, BattleTestedOptimizer
 def main():
     """Main entry point for auto_optuna package."""
     parser = argparse.ArgumentParser(description='Auto Optuna ML Optimization')
-    parser.add_argument('--dataset', type=int, default=1, choices=[1, 2, 3],
-                       help='Dataset to use (1=Hold-1, 2=Hold-2, 3=Hold-1 Full)')
+    parser.add_argument(
+        '--dataset',
+        type=int,
+        default=1,
+        choices=list(DATASET_FILES.keys()),
+        help='Dataset ID to use'
+    )
     parser.add_argument('--optimizer', type=str, default='systematic', 
                        choices=['systematic', 'battle_tested'],
                        help='Optimizer type to use')
