@@ -17,6 +17,8 @@ if __package__ in (None, ""):
         KMeansOutlierTransformer,
         IsolationForestTransformer,
         LocalOutlierFactorTransformer,
+        OutlierFilterTransformer,
+        HSICFeatureSelector,
     )
     from config import CONFIG, Colors
     from utils import load_dataset, setup_logging, console, HAS_RICH, Tree
@@ -26,9 +28,16 @@ else:
         KMeansOutlierTransformer,
         IsolationForestTransformer,
         LocalOutlierFactorTransformer,
+        OutlierFilterTransformer,
+        HSICFeatureSelector,
     )
     from .config import CONFIG, Colors
     from .utils import load_dataset, setup_logging, console, HAS_RICH, Tree
+
+from sklearn.preprocessing import QuantileTransformer, PowerTransformer, MinMaxScaler
+from sklearn.feature_selection import RFECV
+from sklearn.decomposition import KernelPCA, TruncatedSVD
+from sklearn.compose import TransformedTargetRegressor
 
 __version__ = "1.3.0"
 __all__ = [
@@ -37,6 +46,15 @@ __all__ = [
     "KMeansOutlierTransformer",
     "IsolationForestTransformer",
     "LocalOutlierFactorTransformer",
+    "OutlierFilterTransformer",
+    "HSICFeatureSelector",
+    "QuantileTransformer",
+    "PowerTransformer",
+    "MinMaxScaler",
+    "RFECV",
+    "KernelPCA",
+    "TruncatedSVD",
+    "TransformedTargetRegressor",
     "CONFIG",
     "Colors",
     "load_dataset",
