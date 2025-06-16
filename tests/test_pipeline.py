@@ -9,7 +9,7 @@ from config import CONFIG, DATASET_FILES
 from utils import load_dataset, validate_dataset_files
 from optimizer import SystematicOptimizer, BattleTestedOptimizer
 
-@pytest.mark.parametrize("dataset_id", [1, 2, 3])
+@pytest.mark.parametrize("dataset_id", list(CONFIG["DATASET_ID_MAP"].keys()))
 def test_load_dataset(dataset_id):
     dataset_key = CONFIG["DATASET_ID_MAP"][dataset_id]
     assert validate_dataset_files(dataset_key)

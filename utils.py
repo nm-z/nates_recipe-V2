@@ -140,25 +140,40 @@ DATASET_FILES = {
     }
 }
 
-def load_dataset(dataset_id: int):
+def load_dataset(dataset):
+    """Load a dataset by numeric ID or dataset name.
+
+    Parameters
+    ----------
+    dataset : int or str
+        Either a numeric identifier from ``DATASET_FILES`` or a dataset
+        key from ``CONFIG['SKLEARN_DATASETS']``.
+
+    Returns
+    -------
+    tuple
+        ``(X, y)`` arrays
     """
-    Load a dataset by its numeric identifier.
 
-    Args:
-        dataset_id: Identifier key from ``DATASET_FILES``.
+    if isinstance(dataset, int):
+        if dataset not in DATASET_FILES:
+            raise ValueError(
+                f"Invalid dataset ID: {dataset}. Choose from {list(DATASET_FILES.keys())}"
+            )
+        dataset_info = DATASET_FILES[dataset]
+        dataset_key = dataset_info.get("dataset") or dataset_info["name"]
+        params = dataset_info.get("loader_params", {})
+    else:
+        dataset_key = str(dataset)
+        if dataset_key not in CONFIG["SKLEARN_DATASETS"]:
+            raise ValueError(
+                f"Invalid dataset name: {dataset_key}. Choose from {list(CONFIG['SKLEARN_DATASETS'].keys())}"
+            )
+        dataset_info = CONFIG["SKLEARN_DATASETS"][dataset_key]
+        params = dataset_info.get("loader_params", {})
 
-    Returns:
-        tuple: ``(X, y)`` arrays
-    """
-    if dataset_id not in DATASET_FILES:
-        raise ValueError(
-            f"Invalid dataset ID: {dataset_id}. Choose from {list(DATASET_FILES.keys())}"
-        )
-
-    dataset_info = DATASET_FILES[dataset_id]
     loader_name = dataset_info["loader"]
-    dataset_name = dataset_info["name"]
-    params = dataset_info.get("loader_params", {})
+    dataset_name = dataset_info.get("name", dataset_key)
 
     try:
         loader_func = globals()[loader_name]
