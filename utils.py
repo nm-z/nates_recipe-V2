@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from pathlib import Path
-from config import CONFIG, Colors
+from config import CONFIG, Colors, DATASET_FILES as CONFIG_DATASET_FILES
 from sklearn.datasets import (
     load_iris,
     load_diabetes,
@@ -36,109 +36,6 @@ except Exception:  # pragma: no cover - Rich not installed
     console = None
     HAS_RICH = False
 
-# Dataset configuration mapping
-DATASET_FILES = {
-    1: {
-        "name": "California Housing",
-        "loader": "fetch_california_housing",
-        "type": "regression",
-        "predictors": "california_housing_predictors",
-        "targets": "california_housing_targets"
-    },
-    2: {
-        "name": "Diabetes",
-        "loader": "load_diabetes", 
-        "type": "regression",
-        "predictors": "diabetes_predictors",
-        "targets": "diabetes_targets"
-    },
-    3: {
-        "name": "Friedman1 (Synthetic)",
-        "loader": "make_friedman1",
-        "type": "regression",
-        "predictors": "friedman1_predictors",
-        "targets": "friedman1_targets"
-    },
-    4: {
-        "name": "Diabetes (as_frame=True)",
-        "loader": "load_diabetes",
-        "loader_params": {"as_frame": True},
-        "type": "regression",
-        "predictors": "diabetes_frame_predictors",
-        "targets": "diabetes_frame_targets"
-    },
-    5: {
-        "name": "Synthetic Regression",
-        "loader": "make_regression",
-        "loader_params": {
-            "n_samples": 500,
-            "n_features": 60,
-            "n_informative": 6,
-            "noise": 0.15,
-            "effective_rank": 10,
-            "random_state": 1
-        },
-        "type": "regression",
-        "predictors": "regression_predictors",
-        "targets": "regression_targets"
-    },
-    6: {
-        "name": "Airfoil Self Noise",
-        "loader": "fetch_openml",
-        "loader_params": {"name": "airfoil_self_noise", "as_frame": True},
-        "type": "regression",
-        "predictors": "airfoil_predictors",
-        "targets": "airfoil_targets"
-    },
-    7: {
-        "name": "Friedman1 Small",
-        "loader": "make_friedman1",
-        "loader_params": {"n_samples": 300, "noise": 0.0, "random_state": 0},
-        "type": "regression",
-        "predictors": "friedman1_small_predictors",
-        "targets": "friedman1_small_targets"
-    },
-    8: {
-        "name": "Friedman2",
-        "loader": "make_friedman2",
-        "loader_params": {"n_samples": 600, "random_state": 1},
-        "type": "regression",
-        "predictors": "friedman2_predictors",
-        "targets": "friedman2_targets"
-    },
-    9: {
-        "name": "Friedman3",
-        "loader": "make_friedman3",
-        "loader_params": {"n_samples": 600, "random_state": 2},
-        "type": "regression",
-        "predictors": "friedman3_predictors",
-        "targets": "friedman3_targets"
-    },
-    10: {
-        "name": "California Housing (as_frame=True)",
-        "loader": "fetch_california_housing",
-        "loader_params": {"as_frame": True},
-        "type": "regression",
-        "predictors": "california_housing_frame_predictors",
-        "targets": "california_housing_frame_targets"
-    },
-    11: {
-        "name": "Energy Efficiency",
-        "loader": "fetch_openml",
-        "loader_params": {"name": "energy_efficiency", "version": 2, "as_frame": True},
-        "type": "regression",
-        "predictors": "energy_efficiency_predictors",
-        "targets": "energy_efficiency_targets"
-    },
-    12: {
-        "name": "OpenML Dataset 42092",
-        "loader": "fetch_openml",
-        "loader_params": {"data_id": 42092, "as_frame": True},
-        "type": "regression",
-        "predictors": "openml_42092_predictors",
-        "targets": "openml_42092_targets"
-    }
-}
 
 def load_dataset(dataset):
     """Load a dataset by numeric ID or dataset name.
@@ -146,7 +43,7 @@ def load_dataset(dataset):
     Parameters
     ----------
     dataset : int or str
-        Either a numeric identifier from ``DATASET_FILES`` or a dataset
+        Either a numeric identifier from ``CONFIG_DATASET_FILES`` or a dataset
         key from ``CONFIG['SKLEARN_DATASETS']``.
 
     Returns
@@ -156,11 +53,11 @@ def load_dataset(dataset):
     """
 
     if isinstance(dataset, int):
-        if dataset not in DATASET_FILES:
+        if dataset not in CONFIG_DATASET_FILES:
             raise ValueError(
-                f"Invalid dataset ID: {dataset}. Choose from {list(DATASET_FILES.keys())}"
+                f"Invalid dataset ID: {dataset}. Choose from {list(CONFIG_DATASET_FILES.keys())}"
             )
-        dataset_info = DATASET_FILES[dataset]
+        dataset_info = CONFIG_DATASET_FILES[dataset]
         dataset_key = dataset_info.get("dataset") or dataset_info["name"]
         params = dataset_info.get("loader_params", {})
     else:
