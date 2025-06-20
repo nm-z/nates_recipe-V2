@@ -276,7 +276,7 @@ def create_diagnostic_plots(y_true, y_pred, study=None, dataset_num: int = 1,
             if noise_ceiling:
                 ax3.axhline(y=noise_ceiling, color='orange', linestyle=':', 
                            label=f'Noise Ceiling = {noise_ceiling:.3f}')
-            if baseline_r2:
+            if baseline_r2 is not None:
                 ax3.axhline(y=baseline_r2, color='red', linestyle='--',
                            label=f'Baseline = {baseline_r2:.3f}')
             ax3.set_xlabel('Trial Number')
