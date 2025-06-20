@@ -32,3 +32,9 @@ def test_battle_tested_optimizer_single_trial():
     opt = BattleTestedOptimizer(dataset_num=1, max_trials=1)
     results = opt.run_optimization(X, y)
     assert "test_r2" in results
+
+
+def test_load_dataset_invalid_id():
+    """Ensure invalid dataset identifiers raise a ValueError."""
+    with pytest.raises(ValueError):
+        load_dataset(999)
