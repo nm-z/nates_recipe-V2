@@ -10,20 +10,13 @@ Main Components:
 - Utils: Utility functions
 """
 
-if __package__ in (None, ""):
-    # Support running without installing as a package
-    from optimizer import SystematicOptimizer, BattleTestedOptimizer
-    from transformers import (
-        KMeansOutlierTransformer,
-        IsolationForestTransformer,
-        LocalOutlierFactorTransformer,
-        OutlierFilterTransformer,
-        HSICFeatureSelector,
-    )
-    from config import CONFIG, Colors
-    from utils import load_dataset, setup_logging, console, HAS_RICH, Tree
-else:
+# Always use relative imports for proper module structure
+try:
     from .optimizer import SystematicOptimizer, BattleTestedOptimizer
+except ImportError:
+    from optimizer import SystematicOptimizer, BattleTestedOptimizer
+
+try:
     from .transformers import (
         KMeansOutlierTransformer,
         IsolationForestTransformer,
@@ -31,8 +24,24 @@ else:
         OutlierFilterTransformer,
         HSICFeatureSelector,
     )
+except ImportError:
+    from transformers import (
+        KMeansOutlierTransformer,
+        IsolationForestTransformer,
+        LocalOutlierFactorTransformer,
+        OutlierFilterTransformer,
+        HSICFeatureSelector,
+    )
+
+try:
     from .config import CONFIG, Colors
+except ImportError:
+    from config import CONFIG, Colors
+
+try:
     from .utils import load_dataset, setup_logging, console, HAS_RICH, Tree
+except ImportError:
+    from utils import load_dataset, setup_logging, console, HAS_RICH, Tree
 
 from sklearn.preprocessing import QuantileTransformer, PowerTransformer, MinMaxScaler
 from sklearn.feature_selection import RFECV

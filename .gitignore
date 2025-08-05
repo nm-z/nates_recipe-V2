@@ -183,4 +183,8 @@ requirements.txt
 
 # Large data directories
 VNA-D4/
-VNA-D4B/ 
+VNA-D4B/
+Best-Params/
+Data/
+rodgers_data/
+temp_readings-D4.csv 

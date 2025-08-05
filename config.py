@@ -2,6 +2,11 @@
 Configuration Module
 ===================
 Central configuration for all auto_optuna components.
+
+*** IMPORTANT: LOCAL DATA ONLY ***
+This software ONLY USES LOCAL DATA IMPORTED WITHIN THE CODE FOLDER.
+No external datasets, APIs, or remote data sources are supported.
+All training data must be present as CSV files within the project directory.
 """
 
 import optuna
@@ -25,96 +30,22 @@ CONFIG = {
     "CV_SPLITS": 5,
     "CV_REPEATS": 3,
     
-    # Dataset configuration
+    # Dataset configuration - LOCAL DATA ONLY
     "DATASET": {
-        "DEFAULT": "diabetes",  # Default to load_diabetes
         "TEST_SIZE": 0.2,
+        "VALIDATION_SIZE": 0.15,  # Additional validation split
+        "HOLDOUT_SIZE": 0.1,      # Final holdout for unbiased evaluation
         "RANDOM_STATE": 42
     },
     
-    # Scikit-learn Built-in Datasets
-    "SKLEARN_DATASETS": {
-        "iris": {"loader": "load_iris", "type": "classification", "name": "Iris"},
-        "diabetes": {"loader": "load_diabetes", "type": "regression", "name": "Diabetes"},
-        "california_housing": {"loader": "fetch_california_housing", "type": "regression", "name": "California Housing"},
-        "wine": {"loader": "load_wine", "type": "classification", "name": "Wine"},
-        "breast_cancer": {"loader": "load_breast_cancer", "type": "classification", "name": "Breast Cancer Wisconsin"},
-        "diabetes_frame": {
-            "loader": "load_diabetes",
-            "type": "regression",
-            "name": "Diabetes (as_frame=True)",
-            "loader_params": {"as_frame": True},
-        },
-        "synthetic_regression": {
-            "loader": "make_regression",
-            "type": "regression",
-            "name": "Synthetic Regression",
-            "loader_params": {
-                "n_samples": 500,
-                "n_features": 60,
-                "n_informative": 6,
-                "noise": 0.15,
-                "effective_rank": 10,
-                "random_state": 1,
-            },
-        },
-        "airfoil_self_noise": {
-            "loader": "fetch_openml",
-            "type": "regression",
-            "name": "Airfoil Self Noise",
-            "loader_params": {"name": "airfoil_self_noise", "as_frame": True},
-        },
-        "friedman1_small": {
-            "loader": "make_friedman1",
-            "type": "regression",
-            "name": "Friedman1 Small",
-            "loader_params": {"n_samples": 300, "noise": 0.0, "random_state": 0},
-        },
-        "friedman2": {
-            "loader": "make_friedman2",
-            "type": "regression",
-            "name": "Friedman2",
-            "loader_params": {"n_samples": 600, "random_state": 1},
-        },
-        "friedman3": {
-            "loader": "make_friedman3",
-            "type": "regression",
-            "name": "Friedman3",
-            "loader_params": {"n_samples": 600, "random_state": 2},
-        },
-        "california_housing_frame": {
-            "loader": "fetch_california_housing",
-            "type": "regression",
-            "name": "California Housing (as_frame=True)",
-            "loader_params": {"as_frame": True},
-        },
-        "energy_efficiency": {
-            "loader": "fetch_openml",
-            "type": "regression",
-            "name": "Energy Efficiency",
-            "loader_params": {"name": "energy_efficiency", "version": 2, "as_frame": True},
-        },
-        "openml_42092": {
-            "loader": "fetch_openml",
-            "type": "regression",
-            "name": "OpenML Dataset 42092",
-            "loader_params": {"data_id": 42092, "as_frame": True},
-        },
+    # Data split folders - organized splits for no data leakage
+    "DATA_SPLITS": {
+        "TRAIN_DIR": "data_splits/train/",
+        "TEST_DIR": "data_splits/test/", 
+        "VALIDATION_DIR": "data_splits/validation/",
+        "HOLDOUT_DIR": "data_splits/holdout/"
     },
 
-    # Mapping from integer IDs to dataset keys within SKLEARN_DATASETS
-    "DATASET_ID_MAP": {
-        1: "diabetes_frame",
-        2: "synthetic_regression",
-        3: "airfoil_self_noise",
-        4: "friedman1_small",
-        5: "friedman2",
-        6: "friedman3",
-        7: "california_housing_frame",
-        8: "energy_efficiency",
-        9: "openml_42092",
-    },
-    
     # Optuna optimization parameters
     "OPTUNA": {
         "PREPROCESSING_TRIALS": 50,
@@ -122,14 +53,14 @@ CONFIG = {
         "MAX_TRIALS_BATTLE_TESTED": 40,
         "PRUNER_PREPROCESSING": MedianPruner(n_startup_trials=5),
         "PRUNER_HYPEROPT": MedianPruner(n_startup_trials=20),
-        "SAMPLER": optuna.samplers.TPESampler(seed=42, multivariate=True),
+        "SAMPLER": optuna.samplers.TPESampler(seed=42, warn_independent_sampling=False),
     },
     
     # Performance thresholds
     "THRESHOLDS": {
         "EXCELLENT": 0.01,      # ≤ 1% gap to ceiling ⇒ "excellent"
         "NEAR_CEILING": 0.02,   # ≤ 2% gap ⇒ "near ceiling"
-        "TARGET_R2": 0.93       # Default target R²
+        "TARGET_R2": 0.95       # Updated target R² for D3
     },
     
     # Console and logging settings
@@ -170,11 +101,25 @@ CONFIG = {
             "max_depth_range": (5, 20),
             "min_samples_split_range": (2, 10)
         },
+        "EXTRA": {
+            "n_estimators_range": (50, 300),
+            "max_depth_range": (5, 20),
+            "min_samples_split_range": (2, 10)
+        },
         "SVR": {
             "C_range": (0.1, 100),
             "C_log": True,
             "gamma_range": (1e-4, 1),
             "gamma_log": True
+        },
+        "LASSO": {
+            "alpha_range": (1e-4, 10),
+            "alpha_log": True,
+            "max_iter": 2000
+        },
+        "DT": {
+            "max_depth_range": (3, 20),
+            "min_samples_split_range": (2, 10)
         }
     },
     
@@ -187,63 +132,51 @@ CONFIG = {
     }
 }
 
-# Mapping of dataset IDs to friendly names and optional file paths. The
-# loaders are handled via the SKLEARN_DATASETS configuration above. File
-# paths are left as ``None`` for built-in datasets but the structure allows
-# external CSV files to be specified if needed.
+# LOCAL DATA ONLY - Mapping of dataset IDs to local file paths
+# This software ONLY USES LOCAL DATA within the project directory
 DATASET_FILES = {
     1: {
-        "name": CONFIG["SKLEARN_DATASETS"]["diabetes_frame"]["name"],
-        "dataset": "diabetes_frame",
-        "predictors": None,
-        "targets": None,
+        "name": "Engineering Temperature Prediction (Dataset 1)",
+        "predictors": "Data/dataset1_X_predictors.csv",
+        "targets": "Data/dataset1_y_target.csv",
     },
     2: {
-        "name": CONFIG["SKLEARN_DATASETS"]["synthetic_regression"]["name"],
-        "dataset": "synthetic_regression",
-        "predictors": None,
-        "targets": None,
+        "name": "Engineering Temperature Prediction (Dataset 2)",
+        "predictors": "Data/dataset2_X_predictors.csv",
+        "targets": "Data/dataset2_y_target.csv",
     },
     3: {
-        "name": CONFIG["SKLEARN_DATASETS"]["airfoil_self_noise"]["name"],
-        "dataset": "airfoil_self_noise",
-        "predictors": None,
-        "targets": None,
+        "name": "Rodger's Temperature Dataset (VNA Measurements)",
+        "predictors_dir": "rodgers_data/raw_vna_data/",
+        "targets": [
+            "rodgers_data/temperature_data/temp_readings-1.csv",
+            "rodgers_data/temperature_data/temp_readings-2.csv", 
+            "rodgers_data/temperature_data/temp_readings-3.csv"
+        ],
+        "predictor_dirs": [
+            "rodgers_data/raw_vna_data/Predictors-1/",
+            "rodgers_data/raw_vna_data/Predictors-2/",
+            "rodgers_data/raw_vna_data/Predictors-3/"
+        ]
     },
     4: {
-        "name": CONFIG["SKLEARN_DATASETS"]["friedman1_small"]["name"],
-        "dataset": "friedman1_small",
-        "predictors": None,
-        "targets": None,
+        "name": "D4 Temperature Dataset (VNA Measurements)",
+        "predictors_dir": "VNA-D4/",
+        "targets": "temp_readings-D4.csv",
+        "predictor_dirs": ["VNA-D4/"]
     },
     5: {
-        "name": CONFIG["SKLEARN_DATASETS"]["friedman2"]["name"],
-        "dataset": "friedman2",
-        "predictors": None,
-        "targets": None,
-    },
-    6: {
-        "name": CONFIG["SKLEARN_DATASETS"]["friedman3"]["name"],
-        "dataset": "friedman3",
-        "predictors": None,
-        "targets": None,
-    },
-    7: {
-        "name": CONFIG["SKLEARN_DATASETS"]["california_housing_frame"]["name"],
-        "dataset": "california_housing_frame",
-        "predictors": None,
-        "targets": None,
-    },
-    8: {
-        "name": CONFIG["SKLEARN_DATASETS"]["energy_efficiency"]["name"],
-        "dataset": "energy_efficiency",
-        "predictors": None,
-        "targets": None,
-    },
-    9: {
-        "name": CONFIG["SKLEARN_DATASETS"]["openml_42092"]["name"],
-        "dataset": "openml_42092",
-        "predictors": None,
-        "targets": None,
-    },
+        "name": "D4B Temperature Dataset (VNA Measurements - S11/Phase/Xs Only)",
+        "predictors_dir": "VNA-D4B/",
+        "targets": "temp_readings-D4.csv",
+        "predictor_dirs": ["VNA-D4B/"]
+    }
+}
+
+# Data quality validation settings
+DATA_VALIDATION = {
+    "MAX_OUTLIER_ZSCORE": 3.0,
+    "MIN_SAMPLES_PER_FEATURE": 5,
+    "MAX_MISSING_RATIO": 0.1,
+    "REQUIRE_TARGET_PREDICTOR_MATCH": True
 }

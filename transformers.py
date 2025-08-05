@@ -126,7 +126,7 @@ class IsolationForestTransformer(BaseEstimator, TransformerMixin):
             contamination=self.contamination,
             n_estimators=self.n_estimators,
             random_state=self.random_state,
-            n_jobs=-1
+                            n_jobs=1
         )
         labels = self.iforest.fit_predict(X)
         self.mask_ = labels != -1
@@ -156,7 +156,7 @@ class LocalOutlierFactorTransformer(BaseEstimator, TransformerMixin):
             n_neighbors=min(self.n_neighbors, len(X) - 1),
             contamination=self.contamination,
             novelty=False,
-            n_jobs=-1,
+                n_jobs=1,
         )
         labels = self.lof.fit_predict(X)
         self.mask_ = labels != -1
