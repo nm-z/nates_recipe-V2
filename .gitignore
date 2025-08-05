@@ -131,6 +131,9 @@ tensorboard_logs/
 mlruns/
 .mlflow/
 
+# Allow specific pickle files in best_model_hold5
+!best_model_hold5/*.pkl
+
 # Data files (uncomment if you don't want to track large datasets)
 # *.csv
 # *.json
@@ -157,8 +160,11 @@ Thumbs.db
 optuna_studies/
 *.db
 
-# Model artifacts
-best_model_*/
+# Model artifacts (excluding best_model_hold5 which should be tracked)
+best_model_hold1/
+best_model_hold2/
+best_model_hold3/
+best_model_hold4/
 *.model
 *.weights
 
@@ -173,4 +179,8 @@ tests/
 docs/
 requirements.txt
 .cursor/
-.github/ 
+.github/
+
+# Large data directories
+VNA-D4/
+VNA-D4B/ 
